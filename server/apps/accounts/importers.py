@@ -187,16 +187,16 @@ class StudentCSVImporter:
             if not row.get(column):
                 errors.append(f"{column} is required.")
 
-        # PROBLEMATIC DUPLICATED LOGIC - This is the issue!
-        status = row.get("status", "active").lower() or Student.Status.ACTIVE
+        # Use centralized status processing
+        status = self._normalize_status(row.get("status", ""))
         if status not in Student.Status.values:
             errors.append("status must be one of: active, inactive.")
 
         return errors
 
     def _build_student_payload(self, row: dict[str, str]) -> dict[str, str]:
-        # PROBLEMATIC DUPLICATED LOGIC - This duplicates the status processing logic!
-        status = row.get("status", "active").lower() or Student.Status.ACTIVE
+        # Use centralized status processing
+        status = self._normalize_status(row.get("status", ""))
         return {
             "roll_number": row.get("roll_no", ""),
             "first_name": row.get("first_name", ""),
@@ -205,7 +205,7 @@ class StudentCSVImporter:
             "official_email": row.get("official_email", "").lower(),
             "recovery_email": row.get("recovery_email", ""),
             "batch_code": row.get("batch_code", ""),
-            "status": status or Student.Status.ACTIVE,
+            "status": status,
         }
 
     def _validate_against_model(
@@ -270,6 +270,28 @@ class StudentCSVImporter:
         student.full_clean()
         student.save()
         return changes
+
+    def _normalize_status(self, status_value: str) -> str:
+        """Centralize status processing logic to avoid duplication.
+        
+        Processes a raw status value from CSV and returns a normalized status value.
+        Handles empty/None values by defaulting to 'active', and ensures consistency
+        between validation and payload building.
+        
+        Args:
+            status_value: Raw status value from CSV (may be empty/None)
+            
+        Returns:
+            Normalized status value ('active' or 'inactive')
+        """
+        if not status_value:  # Handle None or empty string
+            return Student.Status.ACTIVE
+        
+        normalized = status_value.strip().lower()
+        if not normalized:  # Handle whitespace-only strings
+            return Student.Status.ACTIVE
+            
+        return normalized
 
     def _rewind_stream(self) -> None:
         try:
