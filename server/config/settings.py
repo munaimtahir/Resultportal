@@ -49,6 +49,7 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
+    "social_django",
     "apps.core",
     "apps.accounts",
     "apps.results",
@@ -71,17 +72,59 @@ TEMPLATES = [
         "BACKEND": "django.template.backends.django.DjangoTemplates",
         "DIRS": [BASE_DIR / "templates"],
         "APP_DIRS": True,
-        "OPTIONS": {
-            "context_processors": [
-                "django.template.context_processors.request",
-                "django.contrib.auth.context_processors.auth",
-                "django.contrib.messages.context_processors.messages",
-            ],
+            "OPTIONS": {
+                "context_processors": [
+                    "django.template.context_processors.request",
+                    "django.contrib.auth.context_processors.auth",
+                    "django.contrib.messages.context_processors.messages",
+                    "social_django.context_processors.backends",
+                    "social_django.context_processors.login_redirect",
+                ],
+            },
         },
-    },
 ]
 
 WSGI_APPLICATION = "config.wsgi.application"
+
+
+# Authentication
+GOOGLE_WORKSPACE_DOMAIN = os.getenv("GOOGLE_WORKSPACE_DOMAIN", "pmc.edu.pk")
+
+AUTHENTICATION_BACKENDS = (
+    "social_core.backends.google.GoogleOAuth2",
+    "django.contrib.auth.backends.ModelBackend",
+)
+
+LOGIN_URL = "accounts:login"
+LOGIN_REDIRECT_URL = os.getenv("LOGIN_REDIRECT_URL", "/")
+LOGOUT_REDIRECT_URL = os.getenv("LOGOUT_REDIRECT_URL", "/")
+
+SOCIAL_AUTH_GOOGLE_OAUTH2_KEY = os.getenv("GOOGLE_CLIENT_ID", "")
+SOCIAL_AUTH_GOOGLE_OAUTH2_SECRET = os.getenv("GOOGLE_CLIENT_SECRET", "")
+SOCIAL_AUTH_GOOGLE_OAUTH2_WHITELISTED_DOMAINS = [GOOGLE_WORKSPACE_DOMAIN]
+SOCIAL_AUTH_GOOGLE_OAUTH2_AUTH_EXTRA_ARGUMENTS = {
+    "hd": GOOGLE_WORKSPACE_DOMAIN,
+}
+SOCIAL_AUTH_GOOGLE_OAUTH2_SCOPE = [
+    "https://www.googleapis.com/auth/userinfo.email",
+    "https://www.googleapis.com/auth/userinfo.profile",
+]
+SOCIAL_AUTH_REDIRECT_IS_HTTPS = os.getenv("SOCIAL_AUTH_REDIRECT_IS_HTTPS", "false").lower() == "true"
+SOCIAL_AUTH_LOGIN_ERROR_URL = os.getenv("LOGIN_ERROR_URL", "/auth/error")
+SOCIAL_AUTH_LOGIN_REDIRECT_URL = LOGIN_REDIRECT_URL
+
+SOCIAL_AUTH_PIPELINE = (
+    "social_core.pipeline.social_auth.social_details",
+    "social_core.pipeline.social_auth.social_uid",
+    "social_core.pipeline.social_auth.auth_allowed",
+    "social_core.pipeline.social_auth.social_user",
+    "social_core.pipeline.user.get_username",
+    "social_core.pipeline.user.create_user",
+    "apps.accounts.pipeline.enforce_workspace_domain",
+    "social_core.pipeline.social_auth.associate_user",
+    "social_core.pipeline.social_auth.load_extra_data",
+    "apps.accounts.pipeline.associate_student_profile",
+)
 
 
 # Database
