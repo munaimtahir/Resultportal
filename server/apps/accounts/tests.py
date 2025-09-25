@@ -10,6 +10,7 @@ from .models import Student
 from . import pipeline
 
 
+
 class WorkspacePipelineTests(TestCase):
     def setUp(self) -> None:
         self.backend = "google-oauth2"
@@ -31,7 +32,7 @@ class WorkspacePipelineTests(TestCase):
             username="alice",
             email=self.details["email"],
         )
-        student = Student.objects.create(official_email=self.details["email"])
+in
 
         pipeline.associate_student_profile(
             self.backend,
@@ -48,7 +49,6 @@ class WorkspacePipelineTests(TestCase):
             username="bob",
             email=self.details["email"],
         )
-        Student.objects.create(official_email=self.details["email"], user=original_user)
         other_user = get_user_model().objects.create_user(
             username="charlie",
             email=self.details["email"],
@@ -92,3 +92,4 @@ class WorkspacePipelineTests(TestCase):
 
         student = Student.objects.get(official_email=self.details["email"])
         self.assertEqual(student.user, staff_user)
+

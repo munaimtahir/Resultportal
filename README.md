@@ -14,4 +14,3 @@ For the technical multi-stage prompt, see your ChatGPT message (copy it into `TE
 - Google OAuth2 login wired via `social-auth-app-django` with domain restriction to `@pmc.edu.pk` accounts.
 - Custom pipeline links authenticated users to `Student` records (created from roster imports).
 - Minimal UI for `/accounts/login/` providing a Google sign-in button and messaging for restricted access.
-- Staff accounts signing in with the institutional domain are auto-provisioned to simplify admin onboarding.
