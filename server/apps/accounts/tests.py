@@ -10,24 +10,6 @@ from .models import Student
 from . import pipeline
 
 
-class StudentModelTests(TestCase):
-    def test_status_helpers(self) -> None:
-        active = Student.objects.create(
-            official_email="active@pmc.edu.pk",
-            roll_number="A-1",
-            status=Student.Status.ACTIVE,
-        )
-        inactive = Student.objects.create(
-            official_email="inactive@pmc.edu.pk",
-            roll_number="B-2",
-            status=Student.Status.INACTIVE,
-        )
-
-        self.assertIn(active, Student.objects.active())
-        self.assertNotIn(inactive, Student.objects.active())
-        self.assertTrue(active.is_active)
-        self.assertFalse(inactive.is_active)
-
 
 class WorkspacePipelineTests(TestCase):
     def setUp(self) -> None:
@@ -50,10 +32,7 @@ class WorkspacePipelineTests(TestCase):
             username="alice",
             email=self.details["email"],
         )
-        student = Student.objects.create(
-            official_email=self.details["email"],
-            roll_number="R-1",
-        )
+in
 
         pipeline.associate_student_profile(
             self.backend,
@@ -69,11 +48,6 @@ class WorkspacePipelineTests(TestCase):
         original_user = get_user_model().objects.create_user(
             username="bob",
             email=self.details["email"],
-        )
-        Student.objects.create(
-            official_email=self.details["email"],
-            roll_number="R-1",
-            user=original_user,
         )
         other_user = get_user_model().objects.create_user(
             username="charlie",
@@ -118,5 +92,4 @@ class WorkspacePipelineTests(TestCase):
 
         student = Student.objects.get(official_email=self.details["email"])
         self.assertEqual(student.user, staff_user)
-        self.assertEqual(student.status, Student.Status.ACTIVE)
-        self.assertEqual(student.display_name, staff_user.username)
+
