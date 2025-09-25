@@ -1,3 +1,5 @@
+import io
+from datetime import date
 from decimal import Decimal
 
 from django.contrib.auth import get_user_model
@@ -7,6 +9,7 @@ from django.utils import timezone
 
 from apps.accounts.models import Student
 
+from .importers import ResultCSVImporter
 from .models import ImportBatch, Result
 
 
@@ -88,3 +91,101 @@ class ResultModelTests(TestCase):
         qs = Result.objects.published()
         self.assertIn(published, qs)
         self.assertNotIn(draft, qs)
+
+
+class ResultCSVImporterTests(TestCase):
+    def setUp(self) -> None:
+        self.student = Student.objects.create(
+            roll_number="PMC-001",
+            official_email="student@pmc.edu.pk",
+            display_name="Test Student",
+        )
+        self.staff_user = get_user_model().objects.create_user(
+            username="importer",
+            email="importer@pmc.edu.pk",
+            is_staff=True,
+        )
+        self.initial_batch = ImportBatch.objects.create(
+            import_type=ImportBatch.ImportType.RESULTS,
+            is_dry_run=False,
+        )
+        self.existing_result = Result.objects.create(
+            student=self.student,
+            import_batch=self.initial_batch,
+            respondent_id="resp-1",
+            roll_number="PMC-001",
+            name="Test Student",
+            block="E",
+            year=2025,
+            subject="Pathology",
+            written_marks=Decimal("65.00"),
+            viva_marks=Decimal("20.00"),
+            total_marks=Decimal("85.00"),
+            grade="B",
+            exam_date=date(2025, 1, 15),
+        )
+
+        self.csv_payload = """respondent_id,roll_no,name,block,year,subject,written_marks,viva_marks,total_marks,grade,exam_date
+resp-1,PMC-001,Test Student,E,2025,Pathology,70,20,90,A,2025-01-15
+,PMC-001,Test Student,E,2025,Anatomy,80,20,100,A+,2025-01-16
+,PMC-001,Test Student,E,2025,Physiology,50,20,60,A,2025-01-17
+,PMC-999,Missing Student,E,2025,Pathology,60,20,80,B,2025-01-18
+"""
+
+    def _build_stream(self) -> io.StringIO:
+        return io.StringIO(self.csv_payload)
+
+    def test_preview_flags_errors_without_creating_results(self) -> None:
+        importer = ResultCSVImporter(
+            self._build_stream(),
+            started_by=self.staff_user,
+            filename="results.csv",
+        )
+
+        summary = importer.preview()
+
+        self.assertTrue(summary.batch.is_dry_run)
+        self.assertEqual(summary.created, 1)
+        self.assertEqual(summary.updated, 1)
+        self.assertEqual(summary.skipped, 2)
+        self.assertEqual(summary.row_count, 4)
+        self.assertEqual(Result.objects.count(), 1)
+
+        updated_row = summary.row_results[0]
+        self.assertEqual(updated_row.action, "updated")
+        self.assertIn("Would apply", " ".join(updated_row.messages))
+
+        invalid_total_row = summary.row_results[2]
+        self.assertTrue(invalid_total_row.has_errors)
+        self.assertIn("total_marks", " ".join(invalid_total_row.errors))
+
+        missing_student_row = summary.row_results[3]
+        self.assertTrue(missing_student_row.has_errors)
+        self.assertIn("not found", " ".join(missing_student_row.errors))
+
+    def test_commit_creates_and_updates_results(self) -> None:
+        importer = ResultCSVImporter(self._build_stream(), started_by=self.staff_user)
+
+        summary = importer.commit()
+
+        self.assertFalse(summary.batch.is_dry_run)
+        self.assertIsNotNone(summary.batch.completed_at)
+        self.assertEqual(summary.created, 1)
+        self.assertEqual(summary.updated, 1)
+        self.assertEqual(summary.skipped, 2)
+
+        results = Result.objects.order_by("exam_date")
+        self.assertEqual(results.count(), 2)
+
+        updated_result = results.first()
+        self.assertEqual(updated_result.subject, "Pathology")
+        self.assertEqual(updated_result.total_marks, Decimal("90"))
+        self.assertEqual(updated_result.grade, "A")
+        self.assertEqual(updated_result.import_batch, summary.batch)
+
+        new_result = results.last()
+        self.assertEqual(new_result.subject, "Anatomy")
+        self.assertEqual(new_result.grade, "A+")
+        self.assertEqual(new_result.import_batch, summary.batch)
+
+        self.assertFalse(Result.objects.filter(subject="Physiology").exists())
