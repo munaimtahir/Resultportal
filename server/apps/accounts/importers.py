@@ -10,13 +10,13 @@ from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import transaction
 
-from apps.core.importers import ImportSummary, RowResult
+from apps.core.importers import BaseCSVImporter, ImportSummary, RowResult, flatten_validation_errors
 from apps.results.models import ImportBatch
 
 from .models import Student
 
 
-class StudentCSVImporter:
+class StudentCSVImporter(BaseCSVImporter):
     """Import students from the canonical ``students.csv`` payload."""
 
     REQUIRED_COLUMNS = (
@@ -28,120 +28,12 @@ class StudentCSVImporter:
     )
     OPTIONAL_COLUMNS = ("recovery_email", "batch_code", "status")
 
-    def __init__(
-        self,
-        stream: IO[str],
-        *,
-        started_by=None,
-        filename: str | None = None,
-        notes: str | None = None,
-    ) -> None:
-        self.stream = stream
-        self.started_by = started_by
-        self.filename = filename or ""
-        self.notes = notes or ""
-
-    def preview(self) -> ImportSummary:
-        """Run a dry-run import producing per-row validation feedback."""
-
-        return self._process(dry_run=True)
-
-    def commit(self) -> ImportSummary:
-        """Persist roster changes after successful validation."""
-
-        return self._process(dry_run=False)
-
-    # ------------------------------------------------------------------
-    # Internal helpers
-    # ------------------------------------------------------------------
-    def _process(self, *, dry_run: bool) -> ImportSummary:
-        self._rewind_stream()
-        reader = csv.DictReader(self.stream)
-        self._validate_headers(reader.fieldnames)
-
-        batch = ImportBatch.objects.create(
-            import_type=ImportBatch.ImportType.STUDENTS,
-            started_by=self.started_by,
-            source_filename=self.filename,
-            notes=self.notes,
-            is_dry_run=dry_run,
-        )
-
-        row_results: list[RowResult] = []
-        created = updated = skipped = 0
-        seen_roll_numbers: set[str] = set()
-        seen_emails: set[str] = set()
-
-        context = transaction.atomic() if not dry_run else nullcontext()
-        with context:
-            for row_number, raw_row in enumerate(reader, start=2):
-                normalised = {key: (value or "").strip() for key, value in raw_row.items()}
-                row_result = RowResult(row_number=row_number, action="skipped", data=normalised)
-
-                errors = self._validate_basic_fields(normalised, seen_roll_numbers, seen_emails)
-                if errors:
-                    row_result.errors.extend(errors)
-                    skipped += 1
-                    row_results.append(row_result)
-                    continue
-
-                roll_number = normalised["roll_no"]
-                student = Student.objects.filter(roll_number__iexact=roll_number).first()
-                data = self._build_student_payload(normalised)
-
-                validation_errors = self._validate_against_model(student, data)
-                if validation_errors:
-                    row_result.errors.extend(validation_errors)
-                    skipped += 1
-                    row_results.append(row_result)
-                    continue
-
-                if student is None:
-                    row_result.action = "created"
-                    created += 1
-                    if not dry_run:
-                        self._create_student(data)
-                else:
-                    row_result.action = "updated"
-                    changes = self._update_student(student, data, dry_run)
-                    if not changes:
-                        row_result.messages.append("No changes detected; record already up to date.")
-                    elif dry_run:
-                        row_result.messages.append(
-                            f"Would apply {len(changes)} field change(s)."
-                        )
-                    else:
-                        row_result.messages.append(
-                            f"Applied {len(changes)} field change(s)."
-                        )
-                    updated += 1
-
-                row_results.append(row_result)
-
-            batch.row_count = len(row_results)
-            batch.created_rows = created
-            batch.updated_rows = updated
-            batch.skipped_rows = skipped
-            batch.save(update_fields=[
-                "row_count",
-                "created_rows",
-                "updated_rows",
-                "skipped_rows",
-            ])
-
-            if not dry_run:
-                batch.mark_completed()
-
-        return ImportSummary(
-            batch=batch,
-            created=created,
-            updated=updated,
-            skipped=skipped,
-            row_results=row_results,
-        )
-
+    def _get_import_type(self) -> ImportBatch.ImportType:
+        """Return the import type for batch creation."""
+        return ImportBatch.ImportType.STUDENTS
 
     def _validate_headers(self, headers: Optional[Iterable[str]]) -> None:
+        """Validate that required CSV headers are present."""
         if not headers:
             raise ValueError("students.csv must include a header row.")
 
@@ -150,6 +42,55 @@ class StudentCSVImporter:
         if missing:
             raise ValueError(f"Missing required column(s): {', '.join(missing)}")
 
+    def _process_row(
+        self, row_number: int, normalised: dict[str, str], dry_run: bool, batch: ImportBatch
+    ) -> tuple[str, int, int, int, RowResult]:
+        """Process a single student row."""
+        row_result = RowResult(row_number=row_number, action="skipped", data=normalised)
+
+        # Track seen values within this import
+        if not hasattr(self, '_seen_roll_numbers'):
+            self._seen_roll_numbers: set[str] = set()
+        if not hasattr(self, '_seen_emails'):
+            self._seen_emails: set[str] = set()
+
+        errors = self._validate_basic_fields(normalised, self._seen_roll_numbers, self._seen_emails)
+        if errors:
+            row_result.errors.extend(errors)
+            return "skipped", 0, 0, 1, row_result
+
+        roll_number = normalised["roll_no"]
+        student = Student.objects.filter(roll_number__iexact=roll_number).first()
+        data = self._build_student_payload(normalised)
+
+        validation_errors = self._validate_against_model(student, data)
+        if validation_errors:
+            row_result.errors.extend(validation_errors)
+            return "skipped", 0, 0, 1, row_result
+
+        if student is None:
+            row_result.action = "created"
+            if not dry_run:
+                self._create_student(data)
+            return "created", 1, 0, 0, row_result
+        else:
+            row_result.action = "updated"
+            changes = self._update_student(student, data, dry_run)
+            if not changes:
+                row_result.messages.append("No changes detected; record already up to date.")
+            elif dry_run:
+                row_result.messages.append(
+                    f"Would apply {len(changes)} field change(s)."
+                )
+            else:
+                row_result.messages.append(
+                    f"Applied {len(changes)} field change(s)."
+                )
+            return "updated", 0, 1, 0, row_result
+
+    # ------------------------------------------------------------------
+    # Internal helpers
+    # ------------------------------------------------------------------
     def _validate_basic_fields(
         self,
         row: dict[str, str],
@@ -189,13 +130,14 @@ class StudentCSVImporter:
                 errors.append(f"{column} is required.")
 
 
-        if status not in Student.Status.values:
+        status = row.get("status", "").lower()
+        if status and status not in Student.Status.values:
             errors.append("status must be one of: active, inactive.")
 
         return errors
 
     def _build_student_payload(self, row: dict[str, str]) -> dict[str, str]:
-L
+        status = row.get("status", "").lower()
         return {
             "roll_number": row.get("roll_no", ""),
             "first_name": row.get("first_name", ""),
@@ -204,6 +146,7 @@ L
             "official_email": row.get("official_email", "").lower(),
             "recovery_email": row.get("recovery_email", ""),
             "batch_code": row.get("batch_code", ""),
+            "status": status or "active",
 
         }
 
@@ -215,7 +158,7 @@ L
             try:
                 candidate.full_clean()
             except ValidationError as exc:  # pragma: no cover - exercised in tests
-                return _flatten_validation_errors(exc)
+                return flatten_validation_errors(exc)
             return []
 
         original_values = {field: getattr(student, field) for field in data.keys()}
@@ -224,7 +167,7 @@ L
         try:
             student.full_clean()
         except ValidationError as exc:  # pragma: no cover - exercised in tests
-            errors = _flatten_validation_errors(exc)
+            errors = flatten_validation_errors(exc)
         else:
             errors = []
         finally:
@@ -269,20 +212,3 @@ L
         student.full_clean()
         student.save()
         return changes
-
-
-    def _rewind_stream(self) -> None:
-        try:
-            self.stream.seek(0)
-        except (AttributeError, OSError):  # pragma: no cover - defensive
-            pass
-
-
-def _flatten_validation_errors(error: ValidationError) -> list[str]:
-    messages: list[str] = []
-    if isinstance(error.message_dict, dict):
-        for field, field_errors in error.message_dict.items():
-            for field_error in field_errors:
-                messages.append(f"{field}: {field_error}")
-    else:
-        messages.extend(error.messages)
