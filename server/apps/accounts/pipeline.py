@@ -57,7 +57,6 @@ def associate_student_profile(
         Student.objects.update_or_create(
             official_email=email,
 
-        )
         return
 
     try:
