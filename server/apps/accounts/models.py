@@ -45,8 +45,18 @@ from django.conf import settings
         blank=True,
         help_text="Cohort identifier (e.g., b29).",
     )
+    STATUS_CHOICES = (
+        ("active", "Active"),
+        ("inactive", "Inactive"),
+        ("graduated", "Graduated"),
+        ("suspended", "Suspended"),
+    )
     status = models.CharField(
         max_length=10,
+        choices=STATUS_CHOICES,
+        default="active",
+        help_text="Current status of the student (e.g., active, graduated, suspended).",
+    )
 
     class Meta:
         ordering = ("official_email",)
