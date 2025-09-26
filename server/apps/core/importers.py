@@ -167,11 +167,17 @@ class BaseCSVImporter(ABC):
 def flatten_validation_errors(error: ValidationError) -> list[str]:
     """Extract validation error messages into a flat list."""
     messages: list[str] = []
-    if isinstance(error.message_dict, dict):
-        for field, field_errors in error.message_dict.items():
-            for field_error in field_errors:
-                messages.append(f"{field}: {field_error}")
-    else:
+    try:
+        # Try to access message_dict for field-specific errors
+        message_dict = error.message_dict
+        if isinstance(message_dict, dict):
+            for field, field_errors in message_dict.items():
+                for field_error in field_errors:
+                    messages.append(f"{field}: {field_error}")
+        else:
+            messages.extend(error.messages)
+    except AttributeError:
+        # Fall back to general error messages when message_dict is not available
         messages.extend(error.messages)
     return messages
 
