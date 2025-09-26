@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+"""CSV import workflow for examination results."""
 import csv
 from contextlib import nullcontext
 from datetime import date
