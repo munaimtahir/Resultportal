@@ -140,22 +140,6 @@ class StudentCSVImporter:
             row_results=row_results,
         )
 
-    def _normalize_status(self, status_input: str) -> str:
-        """
-        Normalize status input to a consistent string value.
-        
-        Returns the normalized status string that matches Student.Status values,
-        defaulting to "active" if the input is empty or invalid.
-        """
-        if not status_input or not status_input.strip():
-            return "active"
-        
-        normalized = status_input.strip().lower()
-        if normalized in Student.Status.values:
-            return normalized
-        
-        # Default to active for any invalid input
-        return "active"
 
     def _validate_headers(self, headers: Optional[Iterable[str]]) -> None:
         if not headers:
@@ -204,13 +188,13 @@ class StudentCSVImporter:
             if not row.get(column):
                 errors.append(f"{column} is required.")
 
-        status = self._normalize_status(row.get("status", "active"))
         if status not in Student.Status.values:
             errors.append("status must be one of: active, inactive.")
 
         return errors
 
     def _build_student_payload(self, row: dict[str, str]) -> dict[str, str]:
+
         return {
             "roll_number": row.get("roll_no", ""),
             "first_name": row.get("first_name", ""),
@@ -219,7 +203,7 @@ class StudentCSVImporter:
             "official_email": row.get("official_email", "").lower(),
             "recovery_email": row.get("recovery_email", ""),
             "batch_code": row.get("batch_code", ""),
-            "status": self._normalize_status(row.get("status", "active")),
+
         }
 
     def _validate_against_model(
@@ -285,6 +269,7 @@ class StudentCSVImporter:
         student.save()
         return changes
 
+
     def _rewind_stream(self) -> None:
         try:
             self.stream.seek(0)
@@ -300,4 +285,4 @@ def _flatten_validation_errors(error: ValidationError) -> list[str]:
                 messages.append(f"{field}: {field_error}")
     else:
         messages.extend(error.messages)
-    return messages
+
