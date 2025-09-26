@@ -121,6 +121,7 @@ class Student(models.Model):
         if self.roll_number:
             self.roll_number = self.roll_number.strip()
 
-    def save(self, *args, **kwargs):
-        self.full_clean()
+    def save(self, *args, validate=True, **kwargs):
+        if validate:
+            self.full_clean()
         return super().save(*args, **kwargs)
