@@ -33,3 +33,12 @@ python manage.py runserver 0.0.0.0:8000
 - Authorized JS origins: `https://results.pmc.edu.pk` (and http for dev)
 - Redirect URI: `https://results.pmc.edu.pk/oauth/complete/google-oauth2/`
 - Put client ID/secret in `.env`.
+
+### CSS Framework
+The project uses Tailwind CSS for styling, loaded via CDN in the base template. This provides:
+- Utility-first CSS classes for rapid UI development
+- Consistent design system with the slate color palette
+- Responsive design utilities
+- No build process required
+
+If you prefer to host Tailwind locally or use a different version, you can replace the CDN link in `server/templates/base.html`.
