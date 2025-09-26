@@ -321,34 +321,3 @@ class ResultCSVImporter:
             if old_value != new_value:
                 changes[field] = (old_value, new_value)
 
-        # Simplified logic: if dry_run is True, just return changes without mutating database
-        if dry_run:
-            return changes
-
-        # If not dry_run and there are changes, apply them
-        if changes:
-            for field, (_, new_value) in changes.items():
-                setattr(result, field, new_value)
-
-            result.import_batch = batch
-            result.full_clean()
-            result.save()
-
-        return changes
-
-    def _rewind_stream(self) -> None:
-        try:
-            self.stream.seek(0)
-        except (AttributeError, OSError):  # pragma: no cover - defensive
-            pass
-
-
-def _flatten_validation_errors(error: ValidationError) -> list[str]:
-    messages: list[str] = []
-    if isinstance(error.message_dict, dict):
-        for field, field_errors in error.message_dict.items():
-            for field_error in field_errors:
-                messages.append(f"{field}: {field_error}")
-    else:
-        messages.extend(error.messages)
-    return messages
