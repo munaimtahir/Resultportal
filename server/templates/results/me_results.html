@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+
+{% block title %}My Results · Result Portal{% endblock %}
+
+{% block content %}
+  <main style="max-width: 960px; margin: 0 auto; padding: 3rem 1.5rem 4rem;">
+    <header style="display: flex; justify-content: space-between; align-items: center; gap: 1rem; margin-bottom: 2.5rem;">
+      <div>
+        <p style="margin: 0; color: #64748b; font-size: 0.9rem;">Student</p>
+        <h1 style="margin: 0.3rem 0 0; font-size: 2rem; font-weight: 600; color: #0f172a;">
+          {{ student.display_name|default:student.official_email }}
+        </h1>
+        <p style="margin: 0.6rem 0 0; color: #475569; font-size: 0.95rem;">
+          {{ student.official_email }}{% if student.roll_number %} · Roll {{ student.roll_number }}{% endif %}
+        </p>
+      </div>
+      <a
+        href="{% url 'results:me' %}"
+        style="color: #2563eb; font-weight: 600;"
+        >&larr; Back to dashboard</a
+      >
+    </header>
+
+    <section>
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+        <h2 style="margin: 0; font-size: 1.2rem; font-weight: 600; color: #0f172a;">All published results</h2>
+        <span style="color: #64748b; font-size: 0.9rem;">{{ results_count }} result{{ results_count|pluralize }}</span>
+      </div>
+
+      {% if has_results %}
+        <div style="overflow: hidden; border-radius: 1rem; background: #fff; box-shadow: 0 20px 45px -20px rgba(15, 23, 42, 0.25);">
+          <table style="width: 100%; border-collapse: collapse; font-size: 0.95rem;">
+            <thead style="background: #f1f5f9; color: #475569; text-align: left;">
+              <tr>
+                <th style="padding: 0.85rem 1.25rem; font-weight: 600;">Subject</th>
+                <th style="padding: 0.85rem 1.25rem; font-weight: 600;">Exam date</th>
+                <th style="padding: 0.85rem 1.25rem; font-weight: 600;">Written</th>
+                <th style="padding: 0.85rem 1.25rem; font-weight: 600;">Viva</th>
+                <th style="padding: 0.85rem 1.25rem; font-weight: 600;">Total</th>
+                <th style="padding: 0.85rem 1.25rem; font-weight: 600;">Grade</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for result in results %}
+                <tr style="border-bottom: 1px solid #e2e8f0;">
+                  <td style="padding: 0.85rem 1.25rem; font-weight: 500; color: #0f172a;">{{ result.subject }}</td>
+                  <td style="padding: 0.85rem 1.25rem; color: #475569;">{{ result.exam_date|date:"j M Y" }}</td>
+                  <td style="padding: 0.85rem 1.25rem; color: #0f172a;">{{ result.written_marks|floatformat:2 }}</td>
+                  <td style="padding: 0.85rem 1.25rem; color: #0f172a;">{{ result.viva_marks|floatformat:2 }}</td>
+                  <td style="padding: 0.85rem 1.25rem; color: #0f172a; font-weight: 600;">{{ result.total_marks|floatformat:2 }}</td>
+                  <td style="padding: 0.85rem 1.25rem; color: #2563eb; font-weight: 600;">{{ result.grade }}</td>
+                </tr>
+              {% empty %}
+                <tr>
+                  <td colspan="6" style="padding: 1rem 1.25rem; text-align: center; color: #94a3b8;">No published results yet.</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% else %}
+        <p style="margin: 1.5rem 0; color: #64748b;">Results will appear here after they are published by the administration.</p>
+      {% endif %}
+    </section>
+
+    <footer style="display: flex; justify-content: space-between; align-items: center; margin-top: 3rem; color: #94a3b8; font-size: 0.85rem;">
+      <span>Punjab Medical College Result Portal</span>
+      <a href="{% url 'accounts:logout' %}" style="color: inherit;">Sign out</a>
+    </footer>
+  </main>
+{% endblock %}
