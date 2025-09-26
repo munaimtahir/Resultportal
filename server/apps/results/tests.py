@@ -1,4 +1,6 @@
 
+import io
+from datetime import date, datetime
 from decimal import Decimal
 
 from django.contrib.auth import get_user_model
@@ -8,7 +10,7 @@ from django.utils import timezone
 
 from apps.accounts.models import Student
 
-
+from .importers import ResultCSVImporter
 from .models import ImportBatch, Result
 
 
@@ -55,7 +57,7 @@ class ResultModelTests(TestCase):
             "roll_number": self.student.roll_number,
             "name": "Test Student",
             "block": "E",
-            "year": 2025,
+            "year": datetime.now().year + 1,
             "subject": "Pathology",
             "written_marks": Decimal("70.00"),
             "viva_marks": Decimal("20.00"),
@@ -87,19 +89,56 @@ class ResultModelTests(TestCase):
         draft = self._build_result(subject="Biochem", published_at=None)
         draft.save()
 
+        # Test that only published results appear in the published queryset
+        published_results = Result.objects.filter(published_at__isnull=False)
+        self.assertEqual(published_results.count(), 1)
+        self.assertEqual(published_results.first().subject, "Anatomy")
+
+        # Test that draft results don't appear in published queryset
+        draft_results = Result.objects.filter(published_at__isnull=True)
+        self.assertEqual(draft_results.count(), 1)
+        self.assertEqual(draft_results.first().subject, "Biochem")
+
+
+class ResultCSVImporterTests(TestCase):
+    def setUp(self) -> None:
+        self.student = Student.objects.create(
+            official_email="student@pmc.edu.pk",
+            roll_number="PMC-001",
+            display_name="Test Student",
+        )
+        self.staff_user = get_user_model().objects.create_user(
+            username="staff",
+            email="staff@pmc.edu.pk",
+            is_staff=True,
+        )
+        
+        # Create an existing result for testing updates
+        Result.objects.create(
+            student=self.student,
+            import_batch=ImportBatch.objects.create(
+                import_type=ImportBatch.ImportType.RESULTS,
+                is_dry_run=False,
+            ),
+            respondent_id="resp-1",
+            roll_number=self.student.roll_number,
+            name="Test Student",
+            block="E",
+            year=datetime.now().year + 1,
             subject="Pathology",
             written_marks=Decimal("65.00"),
             viva_marks=Decimal("20.00"),
             total_marks=Decimal("85.00"),
             grade="B",
-            exam_date=date(2025, 1, 15),
+            exam_date=date(datetime.now().year + 1, 1, 15),
         )
 
-        self.csv_payload = """respondent_id,roll_no,name,block,year,subject,written_marks,viva_marks,total_marks,grade,exam_date
-resp-1,PMC-001,Test Student,E,2025,Pathology,70,20,90,A,2025-01-15
-,PMC-001,Test Student,E,2025,Anatomy,80,20,100,A+,2025-01-16
-,PMC-001,Test Student,E,2025,Physiology,50,20,60,A,2025-01-17
-,PMC-999,Missing Student,E,2025,Pathology,60,20,80,B,2025-01-18
+        next_year = datetime.now().year + 1
+        self.csv_payload = f"""respondent_id,roll_no,name,block,year,subject,written_marks,viva_marks,total_marks,grade,exam_date
+resp-1,PMC-001,Test Student,E,{next_year},Pathology,70,20,90,A,{next_year}-01-15
+,PMC-001,Test Student,E,{next_year},Anatomy,80,20,100,A+,{next_year}-01-16
+,PMC-001,Test Student,E,{next_year},Physiology,50,20,60,A,{next_year}-01-17
+,PMC-999,Missing Student,E,{next_year},Pathology,60,20,80,B,{next_year}-01-18
 """
 
     def _build_stream(self) -> io.StringIO:
