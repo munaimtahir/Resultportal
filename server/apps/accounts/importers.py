@@ -122,12 +122,14 @@ class StudentCSVImporter:
             batch.created_rows = created
             batch.updated_rows = updated
             batch.skipped_rows = skipped
-            batch.save(update_fields=[
-                "row_count",
-                "created_rows",
-                "updated_rows",
-                "skipped_rows",
-            ])
+            batch.save(
+                update_fields=[
+                    "row_count",
+                    "created_rows",
+                    "updated_rows",
+                    "skipped_rows",
+                ]
+            )
 
             if not dry_run:
                 batch.mark_completed()
@@ -139,7 +141,6 @@ class StudentCSVImporter:
             skipped=skipped,
             row_results=row_results,
         )
-
 
     def _validate_headers(self, headers: Optional[Iterable[str]]) -> None:
         if not headers:
@@ -188,14 +189,17 @@ class StudentCSVImporter:
             if not row.get(column):
                 errors.append(f"{column} is required.")
 
-
-        if status not in Student.Status.values:
-            errors.append("status must be one of: active, inactive.")
-
         return errors
 
+    def _normalize_status(self, raw_status: str | None) -> str:
+        value = (raw_status or "").strip().lower()
+        if not value:
+            return Student.Status.ACTIVE
+        if value in Student.Status.values:
+            return value
+        return Student.Status.ACTIVE
+
     def _build_student_payload(self, row: dict[str, str]) -> dict[str, str]:
-L
         return {
             "roll_number": row.get("roll_no", ""),
             "first_name": row.get("first_name", ""),
@@ -204,7 +208,7 @@ L
             "official_email": row.get("official_email", "").lower(),
             "recovery_email": row.get("recovery_email", ""),
             "batch_code": row.get("batch_code", ""),
-
+            "status": self._normalize_status(row.get("status")),
         }
 
     def _validate_against_model(
@@ -270,7 +274,6 @@ L
         student.save()
         return changes
 
-
     def _rewind_stream(self) -> None:
         try:
             self.stream.seek(0)
@@ -286,3 +289,4 @@ def _flatten_validation_errors(error: ValidationError) -> list[str]:
                 messages.append(f"{field}: {field_error}")
     else:
         messages.extend(error.messages)
+    return messages
