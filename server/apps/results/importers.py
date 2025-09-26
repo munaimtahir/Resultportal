@@ -262,3 +262,6 @@ class ResultCSVImporter(BaseCSVImporter):
 
         for field, (_, new_value) in changes.items():
             setattr(result, field, new_value)
+        result.import_batch = batch
+        result.full_clean()
+        result.save()
