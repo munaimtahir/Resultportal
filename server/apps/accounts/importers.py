@@ -188,13 +188,14 @@ class StudentCSVImporter:
             if not row.get(column):
                 errors.append(f"{column} is required.")
 
+
         if status not in Student.Status.values:
             errors.append("status must be one of: active, inactive.")
 
         return errors
 
     def _build_student_payload(self, row: dict[str, str]) -> dict[str, str]:
-
+L
         return {
             "roll_number": row.get("roll_no", ""),
             "first_name": row.get("first_name", ""),
@@ -285,4 +286,3 @@ def _flatten_validation_errors(error: ValidationError) -> list[str]:
                 messages.append(f"{field}: {field_error}")
     else:
         messages.extend(error.messages)
-

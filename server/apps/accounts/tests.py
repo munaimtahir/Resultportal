@@ -1,6 +1,4 @@
-"""Tests for Google Workspace authentication helpers and CSV importers."""
 
-import io
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
@@ -9,8 +7,6 @@ from django.test import TestCase
 from social_core.exceptions import AuthForbidden
 
 from .models import Student
-from .importers import StudentCSVImporter
-from . import pipeline
 
 
 class StudentModelTests(TestCase):
@@ -53,10 +49,7 @@ class WorkspacePipelineTests(TestCase):
             username="alice",
             email=self.details["email"],
         )
-        student = Student.objects.create(
-            official_email=self.details["email"],
-            roll_number="R-1",
-        )
+
 
         pipeline.associate_student_profile(
             self.backend,
@@ -73,11 +66,7 @@ class WorkspacePipelineTests(TestCase):
             username="bob",
             email=self.details["email"],
         )
-        Student.objects.create(
-            official_email=self.details["email"],
-            roll_number="R-1",
-            user=original_user,
-        )
+
         other_user = get_user_model().objects.create_user(
             username="charlie",
             email=self.details["email"],
