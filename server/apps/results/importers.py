@@ -320,4 +320,3 @@ class ResultCSVImporter:
             old_value = getattr(result, field)
             if old_value != new_value:
                 changes[field] = (old_value, new_value)
-

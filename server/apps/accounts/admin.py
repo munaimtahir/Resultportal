@@ -23,4 +23,3 @@ class StudentAdmin(admin.ModelAdmin):
         "user__email",
     )
     list_filter = ("status", "batch_code", "updated_at")
-
