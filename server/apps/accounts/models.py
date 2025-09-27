@@ -9,12 +9,10 @@ the CSV imports.
 
 from __future__ import annotations
 
-copilot/fix-36049be9-cfe8-45af-8824-e9e219913d9e
 
-=======
 from django.conf import settings
 from django.core.validators import RegexValidator
-from django.db import models main
+from django.db import models 
 
 
 class Student(models.Model):
