@@ -98,7 +98,11 @@ class Result(models.Model):
         help_text="Import batch that created or last updated this record.",
     )
     respondent_id = models.CharField(max_length=64, blank=True)
-    roll_number = models.CharField(max_length=32, db_index=True)
+    roll_number = models.CharField(
+        max_length=32,
+        db_index=True,
+        help_text="Roll number as it appears in the import data, should match the student's roll number.",
+    )
     name = models.CharField(max_length=255)
     block = models.CharField(max_length=32)
     year = models.PositiveIntegerField()
