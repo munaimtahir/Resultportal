@@ -28,10 +28,6 @@ class StudentCSVImporter(BaseCSVImporter):
     )
     OPTIONAL_COLUMNS = ("recovery_email", "batch_code", "status")
 
-    def _get_import_type(self) -> ImportBatch.ImportType:
-        """Return the import type for batch creation."""
-        return ImportBatch.ImportType.STUDENTS
-
     def _validate_headers(self, headers: Optional[Iterable[str]]) -> None:
         """Validate that required CSV headers are present."""
         if not headers:
@@ -129,15 +125,17 @@ class StudentCSVImporter(BaseCSVImporter):
             if not row.get(column):
                 errors.append(f"{column} is required.")
 
-
-        status = row.get("status", "").lower()
-        if status and status not in Student.Status.values:
-            errors.append("status must be one of: active, inactive.")
-
         return errors
 
+    def _normalize_status(self, raw_status: str | None) -> str:
+        value = (raw_status or "").strip().lower()
+        if not value:
+            return Student.Status.ACTIVE
+        if value in Student.Status.values:
+            return value
+        return Student.Status.ACTIVE
+
     def _build_student_payload(self, row: dict[str, str]) -> dict[str, str]:
-        status = row.get("status", "").lower()
         return {
             "roll_number": row.get("roll_no", ""),
             "first_name": row.get("first_name", ""),
@@ -146,8 +144,7 @@ class StudentCSVImporter(BaseCSVImporter):
             "official_email": row.get("official_email", "").lower(),
             "recovery_email": row.get("recovery_email", ""),
             "batch_code": row.get("batch_code", ""),
-            "status": status or "active",
-
+            "status": self._normalize_status(row.get("status", "")),
         }
 
     def _validate_against_model(

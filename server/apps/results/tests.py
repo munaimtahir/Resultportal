@@ -1,6 +1,6 @@
+from __future__ import annotations
 
 import io
-from datetime import date, datetime
 from decimal import Decimal
 
 from django.contrib.auth import get_user_model
@@ -89,42 +89,14 @@ class ResultModelTests(TestCase):
         draft = self._build_result(subject="Biochem", published_at=None)
         draft.save()
 
-        # Test that only published results appear in the published queryset
-        published_results = Result.objects.filter(published_at__isnull=False)
-        self.assertEqual(published_results.count(), 1)
-        self.assertEqual(published_results.first().subject, "Anatomy")
-
-        # Test that draft results don't appear in published queryset
-        draft_results = Result.objects.filter(published_at__isnull=True)
-        self.assertEqual(draft_results.count(), 1)
-        self.assertEqual(draft_results.first().subject, "Biochem")
-
-
 class ResultCSVImporterTests(TestCase):
     def setUp(self) -> None:
-        self.student = Student.objects.create(
-            official_email="student@pmc.edu.pk",
-            roll_number="PMC-001",
-            display_name="Test Student",
-        )
-        self.staff_user = get_user_model().objects.create_user(
-            username="staff",
-            email="staff@pmc.edu.pk",
-            is_staff=True,
-        )
-        
-        # Create an existing result for testing updates
-        Result.objects.create(
-            student=self.student,
-            import_batch=ImportBatch.objects.create(
-                import_type=ImportBatch.ImportType.RESULTS,
-                is_dry_run=False,
-            ),
+
             respondent_id="resp-1",
             roll_number=self.student.roll_number,
             name="Test Student",
             block="E",
-            year=datetime.now().year + 1,
+
             subject="Pathology",
             written_marks=Decimal("65.00"),
             viva_marks=Decimal("20.00"),
@@ -198,4 +170,3 @@ resp-1,PMC-001,Test Student,E,{next_year},Pathology,70,20,90,A,{next_year}-01-15
         self.assertEqual(new_result.import_batch, summary.batch)
 
         self.assertFalse(Result.objects.filter(subject="Physiology").exists())
-

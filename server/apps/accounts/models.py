@@ -7,20 +7,10 @@ authenticated user with the institutional email address that was provisioned in
 the CSV imports.
 """
 
+from __future__ import annotations
+
 from django.conf import settings
-from django.core.validators import RegexValidator
-from django.db import models
 
-
-class Student(models.Model):
-    """A student registered at the institution."""
-
-    STATUS_CHOICES = [
-        ("active", "Active"),
-        ("inactive", "Inactive"),
-    ]
-
-    # Core identity fields
     official_email = models.EmailField(
         unique=True,
         help_text="Institutional email used for Google Workspace login.",
@@ -30,7 +20,7 @@ class Student(models.Model):
         unique=True,
         null=True,
         blank=True,
-        help_text="Unique roll number assigned by the institution.",
+
         validators=[
             RegexValidator(
                 regex=r"^[A-Za-z0-9_-]+$",
@@ -38,8 +28,6 @@ class Student(models.Model):
             )
         ],
     )
-
-    # Personal information
     first_name = models.CharField(max_length=100, blank=True)
     last_name = models.CharField(max_length=100, blank=True)
     display_name = models.CharField(
@@ -52,30 +40,23 @@ class Student(models.Model):
         help_text="Optional personal email for roster recovery communications.",
     )
 
-    # Academic information
     batch_code = models.CharField(
         max_length=20,
         blank=True,
         help_text="Cohort identifier (e.g., b29).",
     )
+    STATUS_CHOICES = (
+        ("active", "Active"),
+        ("inactive", "Inactive"),
+        ("graduated", "Graduated"),
+        ("suspended", "Suspended"),
+    )
     status = models.CharField(
         max_length=10,
         choices=STATUS_CHOICES,
         default="active",
-        help_text="Whether the student account is active on the portal.",
+        help_text="Current status of the student (e.g., active, graduated, suspended).",
     )
-
-    # System fields
-    user = models.OneToOneField(
-        settings.AUTH_USER_MODEL,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="student_profile",
-        help_text="Linked Django user once the student logs in via Google.",
-    )
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         ordering = ("official_email",)
@@ -83,6 +64,3 @@ class Student(models.Model):
             models.Index(fields=["roll_number"], name="student_roll_number_idx"),
             models.Index(fields=["status"], name="student_status_idx"),
         ]
-
-    def __str__(self):
-        return f"{self.display_name or self.official_email} ({self.roll_number})"
