@@ -126,6 +126,7 @@ class StudentCSVImporter(BaseCSVImporter):
                 errors.append(f"{column} is required.")
 
 
+    def _normalize_status(self, raw_status: str | None) -> str:
         value = (raw_status or "").strip().lower()
         if not value:
             return Student.Status.ACTIVE
