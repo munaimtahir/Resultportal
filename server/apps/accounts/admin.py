@@ -7,4 +7,20 @@ from .models import Student
 
 @admin.register(Student)
 class StudentAdmin(admin.ModelAdmin):
-    pass
+    """Configuration for managing students in the Django admin."""
+
+    list_display = (
+        "official_email",
+        "roll_number",
+        "display_name",
+        "status",
+        "created_at",
+    )
+    search_fields = (
+        "official_email",
+        "roll_number",
+        "display_name",
+        "first_name",
+        "last_name",
+    )
+    ordering = ("official_email",)
