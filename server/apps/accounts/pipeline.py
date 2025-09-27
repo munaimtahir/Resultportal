@@ -51,12 +51,13 @@ def associate_student_profile(
 
     email = _normalize_email(details.get("email"))
 
+    display_name = user.get_full_name() or getattr(user, "username", "") or email.split("@")[0]
+
     # Superusers/staff can authenticate even without a Student record to
     # accommodate administrative accounts that will be provisioned later.
     if user and (user.is_staff or user.is_superuser):
         Student.objects.update_or_create(
             official_email=email,
-            defaults={"user": user},
         )
         return
 
@@ -74,4 +75,8 @@ def associate_student_profile(
         )
 
     student.user = user
-    student.save(update_fields=["user", "updated_at"])
+    update_fields = ["user", "updated_at"]
+    if not student.display_name:
+        student.display_name = display_name
+        update_fields.append("display_name")
+    student.save(update_fields=update_fields)

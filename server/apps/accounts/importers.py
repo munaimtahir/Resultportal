@@ -28,10 +28,6 @@ class StudentCSVImporter(BaseCSVImporter):
     )
     OPTIONAL_COLUMNS = ("recovery_email", "batch_code", "status")
 
-    def _get_import_type(self) -> ImportBatch.ImportType:
-        """Return the import type for batch creation."""
-        return ImportBatch.ImportType.STUDENTS
-
     def _validate_headers(self, headers: Optional[Iterable[str]]) -> None:
         """Validate that required CSV headers are present."""
         if not headers:
@@ -129,14 +125,7 @@ class StudentCSVImporter(BaseCSVImporter):
             if not row.get(column):
                 errors.append(f"{column} is required.")
 
-        status = self._normalize_status(row.get("status", ""))
-        if status not in Student.Status.values:
-            errors.append("status must be one of: active, inactive.")
 
-        return errors
-
-    def _normalize_status(self, raw_status: str | None) -> str:
-        """Normalize status input to a valid Student.Status value."""
         value = (raw_status or "").strip().lower()
         if not value:
             return Student.Status.ACTIVE

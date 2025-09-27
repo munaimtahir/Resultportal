@@ -1,7 +1,6 @@
-"""CSV import workflow for examination results."""
-
 from __future__ import annotations
 
+"""CSV import workflow for examination results."""
 import csv
 from contextlib import nullcontext
 from datetime import date
@@ -263,8 +262,6 @@ class ResultCSVImporter(BaseCSVImporter):
 
         for field, (_, new_value) in changes.items():
             setattr(result, field, new_value)
-
         result.import_batch = batch
         result.full_clean()
         result.save()
-        return changes

@@ -1,3 +1,4 @@
+from __future__ import annotations
 
 from __future__ import annotations
 
@@ -54,7 +55,11 @@ class WorkspacePipelineTests(TestCase):
             username="alice",
             email=self.details["email"],
         )
-
+        student = Student.objects.create(
+            official_email=self.details["email"],
+            roll_number="PMC-001",
+            display_name="Alice",
+        )
 
         pipeline.associate_student_profile(
             self.backend,
@@ -70,6 +75,11 @@ class WorkspacePipelineTests(TestCase):
         original_user = get_user_model().objects.create_user(
             username="bob",
             email=self.details["email"],
+        )
+        student = Student.objects.create(
+            official_email=self.details["email"],
+            roll_number="PMC-001",
+            user=original_user,
         )
 
         other_user = get_user_model().objects.create_user(
@@ -116,7 +126,7 @@ class WorkspacePipelineTests(TestCase):
         student = Student.objects.get(official_email=self.details["email"])
         self.assertEqual(student.user, staff_user)
         self.assertEqual(student.status, Student.Status.ACTIVE)
-        self.assertEqual(student.display_name, staff_user.username)
+        self.assertEqual(student.display_name, staff_user.get_full_name() or staff_user.username)
 
 
 class StudentCSVImporterTests(TestCase):
@@ -196,10 +206,8 @@ PMC-003,Charlie,Brown,Charlie Brown,charlie@gmail.com,,b29,active
 
     def test_status_normalization_consistency(self) -> None:
         """Test that status values are consistently normalized to string values."""
-        # Create a mock importer to test the helper method
         importer = StudentCSVImporter(io.StringIO(""), started_by=self.staff_user)
 
-        # Test the helper method directly
         test_cases = [
             ("", "active"),  # Empty should default to active
             ("  ", "active"),  # Whitespace should default to active
@@ -215,21 +223,19 @@ PMC-003,Charlie,Brown,Charlie Brown,charlie@gmail.com,,b29,active
             self.assertEqual(result, expected, f"Input {input_status!r} should normalize to {expected!r}")
             self.assertIn(result, Student.Status.values, f"Result {result!r} should be a valid status")
 
-        # Test with a single valid row to ensure the fix works end-to-end
         test_importer = StudentCSVImporter(
             io.StringIO(
                 "roll_no,first_name,last_name,display_name,official_email,status\n"
-                "PMC-TEST,John,Doe,John Doe,johndoe@pmc.edu.pk,\n"  # Empty status should default to active
+                "PMC-TEST,John,Doe,John Doe,johndoe@pmc.edu.pk,\n"
             ),
             started_by=self.staff_user,
-            filename="test_status.csv"
+            filename="test_status.csv",
         )
-        
+
         summary = test_importer.commit()
         self.assertEqual(summary.created, 1)
         self.assertEqual(summary.skipped, 0)
-        
-        # Verify the student was created with correct status
+
         student = Student.objects.get(roll_number="PMC-TEST")
         self.assertEqual(student.status, "active")
         self.assertIsInstance(student.status, str, "Student status should be string")
