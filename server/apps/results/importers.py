@@ -265,3 +265,4 @@ class ResultCSVImporter(BaseCSVImporter):
         result.import_batch = batch
         result.full_clean()
         result.save()
+        return changes
