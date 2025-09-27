@@ -136,7 +136,6 @@ class StudentCSVImporter(BaseCSVImporter):
         return Student.Status.ACTIVE
 
     def _build_student_payload(self, row: dict[str, str]) -> dict[str, str]:
-
         return {
             "roll_number": row.get("roll_no", ""),
             "first_name": row.get("first_name", ""),
