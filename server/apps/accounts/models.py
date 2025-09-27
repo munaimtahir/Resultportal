@@ -9,9 +9,10 @@ the CSV imports.
 
 from __future__ import annotations
 
+
 from django.conf import settings
 from django.core.validators import RegexValidator
-from django.db import models
+from django.db import models 
 
 
 class Student(models.Model):
@@ -69,11 +70,14 @@ class Student(models.Model):
         max_length=10,
         choices=STATUS_CHOICES,
         default="active",
-        help_text="Current status of the student (e.g., active, graduated, suspended).",
     )
 
+ copilot/fix-36049be9-cfe8-45af-8824-e9e219913d9e
+    objects = StudentManager()
+=======
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+ main
 
     class Meta:
         ordering = ("official_email",)
@@ -81,6 +85,7 @@ class Student(models.Model):
             models.Index(fields=["roll_number"], name="student_roll_number_idx"),
             models.Index(fields=["status"], name="student_status_idx"),
         ]
+ copilot/fix-36049be9-cfe8-45af-8824-e9e219913d9e
 
     def __str__(self) -> str:  # pragma: no cover - trivial
         if self.display_name:
