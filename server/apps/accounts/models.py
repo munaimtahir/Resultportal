@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+
 from django.conf import settings
 from django.core.validators import RegexValidator
-from django.db import models
+from django.db import models 
 
 
 class StudentQuerySet(models.QuerySet["Student"]):
@@ -68,12 +69,10 @@ class Student(models.Model):
     )
     status = models.CharField(
         max_length=10,
-        choices=Status.choices,
-        default=Status.ACTIVE,
-        help_text="Whether the student account is active on the portal.",
-    )
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+ main
 
     class Meta:
         ordering = ("official_email",)
@@ -81,12 +80,4 @@ class Student(models.Model):
             models.Index(fields=["roll_number"], name="student_roll_number_idx"),
             models.Index(fields=["status"], name="student_status_idx"),
         ]
-
-    def __str__(self) -> str:  # pragma: no cover - trivial helper
-        return self.display_name or self.official_email
-
-    @property
-    def is_active(self) -> bool:
-        """Boolean helper used by tests and import flows."""
-
-        return self.status == self.Status.ACTIVE
+ copilot/fix-36049be9-cfe8-45af-8824-e9e219913d9e

@@ -128,7 +128,6 @@ class StudentCSVImporter(BaseCSVImporter):
             if not row.get(column):
                 errors.append(f"{column} is required.")
 
-        return errors
 
     def _normalize_status(self, raw_status: str | None) -> str:
         value = (raw_status or "").strip().lower()
@@ -148,6 +147,7 @@ class StudentCSVImporter(BaseCSVImporter):
             "recovery_email": row.get("recovery_email", ""),
             "batch_code": row.get("batch_code", ""),
             "status": self._normalize_status(row.get("status", "")),
+
         }
 
     def _validate_against_model(
