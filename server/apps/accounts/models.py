@@ -64,4 +64,4 @@ from __future__ import annotations
         indexes = [
             models.Index(fields=["roll_number"], name="student_roll_number_idx"),
             models.Index(fields=["status"], name="student_status_idx"),
-
+        ]
