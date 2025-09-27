@@ -27,7 +27,7 @@ from django.conf import settings
                 message="Roll numbers may only contain letters, numbers, dashes or underscores.",
             )
         ],
-
+    )
     first_name = models.CharField(max_length=100, blank=True)
     last_name = models.CharField(max_length=100, blank=True)
     display_name = models.CharField(
