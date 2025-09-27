@@ -93,4 +93,3 @@ class Student(models.Model):
         if self.display_name:
             return f"{self.display_name} ({self.official_email})"
         return self.official_email
-    main
