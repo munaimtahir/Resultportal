@@ -71,10 +71,6 @@ class Student(models.Model):
         max_length=10,
         choices=Status.choices,
         default=Status.ACTIVE,
-        help_text="Current status of the student record.",
-    )
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         ordering = ("official_email",)
@@ -82,24 +78,3 @@ class Student(models.Model):
             models.Index(fields=["roll_number"], name="student_roll_number_idx"),
             models.Index(fields=["status"], name="student_status_idx"),
         ]
-
-    def __str__(self) -> str:
-        return f"{self.display_name or self.official_email} ({self.roll_number})"
-
-    @property
-    def is_active(self) -> bool:
-        """Return True if the student status is ACTIVE."""
-        return self.status == self.Status.ACTIVE
-
-    @property
-    def full_name(self) -> str:
-        """Return the full name of the student."""
-        if self.display_name:
-            return self.display_name
-        return f"{self.first_name} {self.last_name}".strip()
-
-    def clean(self) -> None:
-        """Normalize email and validate the model."""
-        super().clean()
-        if self.official_email:
-            self.official_email = self.official_email.lower().strip()
