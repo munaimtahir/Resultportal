@@ -69,10 +69,28 @@ class Student(models.Model):
     )
     status = models.CharField(
         max_length=10,
+        choices=Status.choices,
+        default=Status.ACTIVE,
+        help_text="Whether the student account is active on the portal.",
+    )
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
- main
+
+    @property
+    def is_active(self) -> bool:
+        """Return ``True`` when the student is marked as active."""
+
+        return self.status == self.Status.ACTIVE
+
+    def __str__(self) -> str:  # pragma: no cover - trivial
+        """Human readable representation used in admin and logs."""
+
+        if self.display_name:
+            return self.display_name
+        if self.official_email:
+            return self.official_email
+        return self.roll_number or "Student"
 
     class Meta:
         ordering = ("official_email",)
@@ -80,4 +98,3 @@ class Student(models.Model):
             models.Index(fields=["roll_number"], name="student_roll_number_idx"),
             models.Index(fields=["status"], name="student_status_idx"),
         ]
- copilot/fix-36049be9-cfe8-45af-8824-e9e219913d9e

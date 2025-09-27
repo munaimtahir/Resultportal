@@ -128,6 +128,8 @@ class StudentCSVImporter(BaseCSVImporter):
             if not row.get(column):
                 errors.append(f"{column} is required.")
 
+        return errors
+
 
     def _normalize_status(self, raw_status: str | None) -> str:
         value = (raw_status or "").strip().lower()
