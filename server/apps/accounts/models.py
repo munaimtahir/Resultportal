@@ -74,8 +74,14 @@ class Student(models.Model):
         help_text="Whether the student account is active on the portal.",
     )
 
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+        help_text="Timestamp for when the student record was first created.",
+    )
+    updated_at = models.DateTimeField(
+        auto_now=True,
+        help_text="Timestamp for the most recent update of the student record.",
+    )
 
     @property
     def is_active(self) -> bool:
