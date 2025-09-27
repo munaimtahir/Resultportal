@@ -10,7 +10,21 @@ the CSV imports.
 from __future__ import annotations
 
 from django.conf import settings
+from django.core.validators import RegexValidator
+from django.db import models
 
+
+class Student(models.Model):
+    """Student record linked to Django User via one-to-one relationship."""
+
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="student_profile",
+        help_text="Linked Django user once the student logs in via Google.",
+    )
     official_email = models.EmailField(
         unique=True,
         help_text="Institutional email used for Google Workspace login.",
@@ -20,7 +34,7 @@ from django.conf import settings
         unique=True,
         null=True,
         blank=True,
-
+        help_text="Unique roll number assigned by the institution.",
         validators=[
             RegexValidator(
                 regex=r"^[A-Za-z0-9_-]+$",
@@ -58,9 +72,17 @@ from django.conf import settings
         help_text="Current status of the student (e.g., active, graduated, suspended).",
     )
 
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
     class Meta:
         ordering = ("official_email",)
         indexes = [
             models.Index(fields=["roll_number"], name="student_roll_number_idx"),
             models.Index(fields=["status"], name="student_status_idx"),
         ]
+
+    def __str__(self) -> str:  # pragma: no cover - trivial
+        if self.display_name:
+            return f"{self.display_name} ({self.official_email})"
+        return self.official_email
