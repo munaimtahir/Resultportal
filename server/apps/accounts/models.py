@@ -12,13 +12,20 @@ from django.core.validators import RegexValidator
 from django.db import models
 
 
+class StudentManager(models.Manager):
+    """Custom manager for Student model."""
+    
+    def active(self):
+        """Return only active students."""
+        return self.filter(status=Student.Status.ACTIVE)
+
+
 class Student(models.Model):
     """A student registered at the institution."""
 
-    STATUS_CHOICES = [
-        ("active", "Active"),
-        ("inactive", "Inactive"),
-    ]
+    class Status(models.TextChoices):
+        ACTIVE = "active", "Active"
+        INACTIVE = "inactive", "Inactive"
 
     # Core identity fields
     official_email = models.EmailField(
@@ -60,8 +67,8 @@ class Student(models.Model):
     )
     status = models.CharField(
         max_length=10,
-        choices=STATUS_CHOICES,
-        default="active",
+        choices=Status.choices,
+        default=Status.ACTIVE,
         help_text="Whether the student account is active on the portal.",
     )
 
@@ -77,6 +84,8 @@ class Student(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
+    objects = StudentManager()
+
     class Meta:
         ordering = ("official_email",)
         indexes = [
@@ -86,3 +95,8 @@ class Student(models.Model):
 
     def __str__(self):
         return f"{self.display_name or self.official_email} ({self.roll_number})"
+
+    @property
+    def is_active(self):
+        """Return True if the student is active."""
+        return self.status == self.Status.ACTIVE

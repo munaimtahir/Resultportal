@@ -1,4 +1,6 @@
 
+from __future__ import annotations
+
 import io
 
 from django.conf import settings
@@ -7,6 +9,8 @@ from django.core.exceptions import PermissionDenied
 from django.test import TestCase
 from social_core.exceptions import AuthForbidden
 
+from . import pipeline
+from .importers import StudentCSVImporter
 from .models import Student
 
 

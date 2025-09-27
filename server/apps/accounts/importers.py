@@ -129,15 +129,22 @@ class StudentCSVImporter(BaseCSVImporter):
             if not row.get(column):
                 errors.append(f"{column} is required.")
 
-
-        status = row.get("status", "").lower()
-        if status and status not in Student.Status.values:
+        status = self._normalize_status(row.get("status", ""))
+        if status not in Student.Status.values:
             errors.append("status must be one of: active, inactive.")
 
         return errors
 
+    def _normalize_status(self, raw_status: str | None) -> str:
+        """Normalize status input to a valid Student.Status value."""
+        value = (raw_status or "").strip().lower()
+        if not value:
+            return Student.Status.ACTIVE
+        if value in Student.Status.values:
+            return value
+        return Student.Status.ACTIVE
+
     def _build_student_payload(self, row: dict[str, str]) -> dict[str, str]:
-        status = row.get("status", "").lower()
         return {
             "roll_number": row.get("roll_no", ""),
             "first_name": row.get("first_name", ""),
@@ -146,7 +153,7 @@ class StudentCSVImporter(BaseCSVImporter):
             "official_email": row.get("official_email", "").lower(),
             "recovery_email": row.get("recovery_email", ""),
             "batch_code": row.get("batch_code", ""),
-            "status": status or "active",
+            "status": self._normalize_status(row.get("status", "")),
 
         }
 
