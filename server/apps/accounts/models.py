@@ -17,7 +17,7 @@ class StudentManager(models.Manager):
     
     def active(self):
         """Return only active students."""
-        return self.filter(status=Student.Status.ACTIVE)
+        return self.filter(status="active")
 
 
 class Student(models.Model):
