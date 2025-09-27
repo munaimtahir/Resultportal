@@ -28,6 +28,9 @@ class StudentCSVImporter(BaseCSVImporter):
     )
     OPTIONAL_COLUMNS = ("recovery_email", "batch_code", "status")
 
+    def _get_import_type(self) -> ImportBatch.ImportType:
+        return ImportBatch.ImportType.STUDENTS
+
     def _validate_headers(self, headers: Optional[Iterable[str]]) -> None:
         """Validate that required CSV headers are present."""
         if not headers:

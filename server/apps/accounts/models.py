@@ -1,11 +1,4 @@
-"""Accounts domain models.
-
-Stage 1 introduces a minimal ``Student`` record that is linked to the Django
-``User`` model via a one-to-one relationship. Later stages will expand the
-schema, but for Google Workspace login we only need to be able to associate an
-authenticated user with the institutional email address that was provisioned in
-the CSV imports.
-"""
+"""Accounts domain models."""
 
 from __future__ import annotations
 
@@ -15,8 +8,23 @@ from django.core.validators import RegexValidator
 from django.db import models 
 
 
+class StudentQuerySet(models.QuerySet["Student"]):
+    """Custom queryset with helpers used by the importer and pipeline."""
+
+    def active(self) -> "StudentQuerySet":
+        """Return only students whose status is ``ACTIVE``."""
+
+        return self.filter(status=Student.Status.ACTIVE)
+
+
 class Student(models.Model):
-    """Student record linked to Django User via one-to-one relationship."""
+    """Student record linked to Django ``User`` via a one-to-one relationship."""
+
+    class Status(models.TextChoices):
+        ACTIVE = "active", "Active"
+        INACTIVE = "inactive", "Inactive"
+
+    objects = StudentQuerySet.as_manager()
 
     user = models.OneToOneField(
         settings.AUTH_USER_MODEL,
@@ -54,27 +62,14 @@ class Student(models.Model):
         blank=True,
         help_text="Optional personal email for roster recovery communications.",
     )
-
     batch_code = models.CharField(
         max_length=20,
         blank=True,
         help_text="Cohort identifier (e.g., b29).",
     )
-    STATUS_CHOICES = (
-        ("active", "Active"),
-        ("inactive", "Inactive"),
-        ("graduated", "Graduated"),
-        ("suspended", "Suspended"),
-    )
     status = models.CharField(
         max_length=10,
-        choices=STATUS_CHOICES,
-        default="active",
-    )
 
- copilot/fix-36049be9-cfe8-45af-8824-e9e219913d9e
-    objects = StudentManager()
-=======
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
  main
@@ -86,8 +81,3 @@ class Student(models.Model):
             models.Index(fields=["status"], name="student_status_idx"),
         ]
  copilot/fix-36049be9-cfe8-45af-8824-e9e219913d9e
-
-    def __str__(self) -> str:  # pragma: no cover - trivial
-        if self.display_name:
-            return f"{self.display_name} ({self.official_email})"
-        return self.official_email
