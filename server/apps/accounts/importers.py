@@ -145,7 +145,7 @@ class StudentCSVImporter(BaseCSVImporter):
             "official_email": row.get("official_email", "").lower(),
             "recovery_email": row.get("recovery_email", ""),
             "batch_code": row.get("batch_code", ""),
-
+            "status": self._normalize_status(row.get("status", "")),
         }
 
     def _validate_against_model(
