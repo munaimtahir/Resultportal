@@ -53,7 +53,8 @@ from __future__ import annotations
     )
     status = models.CharField(
         max_length=10,
-
+        choices=STATUS_CHOICES,
+        default="active",
     )
 
     objects = StudentManager()
