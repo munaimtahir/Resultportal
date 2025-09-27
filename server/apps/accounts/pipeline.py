@@ -58,6 +58,7 @@ def associate_student_profile(
     if user and (user.is_staff or user.is_superuser):
         Student.objects.update_or_create(
             official_email=email,
+            defaults={"display_name": display_name},
         )
         return
 
