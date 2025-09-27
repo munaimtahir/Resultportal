@@ -71,26 +71,6 @@ class Student(models.Model):
         max_length=10,
         choices=Status.choices,
         default=Status.ACTIVE,
-        help_text="Whether the student account is active on the portal.",
-    )
-
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-
-    @property
-    def is_active(self) -> bool:
-        """Return ``True`` when the student is marked as active."""
-
-        return self.status == self.Status.ACTIVE
-
-    def __str__(self) -> str:  # pragma: no cover - trivial
-        """Human readable representation used in admin and logs."""
-
-        if self.display_name:
-            return self.display_name
-        if self.official_email:
-            return self.official_email
-        return self.roll_number or "Student"
 
     class Meta:
         ordering = ("official_email",)

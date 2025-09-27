@@ -164,3 +164,15 @@ class Result(models.Model):
     def save(self, *args, **kwargs):
         self.full_clean()
         return super().save(*args, **kwargs)
+
+    def publish(self) -> None:
+        """Mark this result as published, making it visible to students."""
+        if not self.is_published:
+            self.published_at = timezone.now()
+            self.save(update_fields=["published_at"])
+
+    def unpublish(self) -> None:
+        """Mark this result as unpublished, hiding it from students."""
+        if self.is_published:
+            self.published_at = None
+            self.save(update_fields=["published_at"])
