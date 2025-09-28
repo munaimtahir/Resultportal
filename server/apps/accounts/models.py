@@ -73,6 +73,8 @@ class Student(models.Model):
         default=Status.ACTIVE,
         help_text="Current status of the student.",
     )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         ordering = ("official_email",)
@@ -80,3 +82,12 @@ class Student(models.Model):
             models.Index(fields=["roll_number"], name="student_roll_number_idx"),
             models.Index(fields=["status"], name="student_status_idx"),
         ]
+
+    @property
+    def is_active(self) -> bool:
+        """Check if the student is in active status."""
+        return self.status == self.Status.ACTIVE
+
+    def get_status_display(self) -> str:
+        """Get human-readable status display (Django provides this automatically)."""
+        return dict(self.Status.choices)[self.status]
