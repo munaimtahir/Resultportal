@@ -79,7 +79,6 @@ class Student(models.Model):
     @property
     def is_active(self) -> bool:
         """Return ``True`` when the student's status is active."""
-
         return self.status == Student.Status.ACTIVE
 
     class Meta:
