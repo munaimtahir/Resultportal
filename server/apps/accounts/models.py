@@ -89,6 +89,3 @@ class Student(models.Model):
         """Check if the student is in active status."""
         return self.status == self.Status.ACTIVE
 
-    def get_status_display(self) -> str:
-        """Get human-readable status display (Django provides this automatically)."""
-        return dict(self.Status.choices)[self.status]
