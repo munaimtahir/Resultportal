@@ -76,10 +76,6 @@ class Student(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
-    @property
-    def is_active(self) -> bool:
-        """Return ``True`` when the student's status is active."""
-        return self.status == Student.Status.ACTIVE
 
     class Meta:
         ordering = ("official_email",)
@@ -87,3 +83,9 @@ class Student(models.Model):
             models.Index(fields=["roll_number"], name="student_roll_number_idx"),
             models.Index(fields=["status"], name="student_status_idx"),
         ]
+
+    @property
+    def is_active(self) -> bool:
+        """Check if the student is in active status."""
+        return self.status == self.Status.ACTIVE
+

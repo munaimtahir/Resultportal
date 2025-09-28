@@ -15,7 +15,9 @@ class StudentAdmin(admin.ModelAdmin):
         "display_name",
         "status",
         "created_at",
+        "updated_at",
     )
+    list_filter = ("status", "created_at")
     search_fields = (
         "official_email",
         "roll_number",
@@ -24,3 +26,4 @@ class StudentAdmin(admin.ModelAdmin):
         "last_name",
     )
     ordering = ("official_email",)
+    readonly_fields = ("created_at", "updated_at")
