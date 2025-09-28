@@ -71,6 +71,8 @@ class Student(models.Model):
         max_length=10,
         choices=Status.choices,
         default=Status.ACTIVE,
+        help_text="Current status of the student.",
+    )
 
     class Meta:
         ordering = ("official_email",)
