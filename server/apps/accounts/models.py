@@ -71,10 +71,11 @@ class Student(models.Model):
         max_length=10,
         choices=Status.choices,
         default=Status.ACTIVE,
-        help_text="Current status of the student.",
+        help_text="Current status of the student record.",
     )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+
 
     class Meta:
         ordering = ("official_email",)
