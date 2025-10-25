@@ -1,23 +1,39 @@
 # PMC Result Portal
 
-A secure result portal for PMC students to view their examination results through Google Workspace authentication.
+A comprehensive result management system for PMC (Pakistan Medical Council) with multi-stage verification workflow, analytics dashboards, and secure student access.
 
 ## Features
 
+### Core Functionality
+- **Multi-Stage Verification Workflow**: DRAFT → SUBMITTED → VERIFIED → PUBLISHED with audit trail
 - **Google Workspace SSO**: Login restricted to `@pmc.edu.pk` domain
-- **Student Self-Service**: Students can view only their own results
-- **CSV Import System**: Bulk import students and results with dry-run preview
-- **Admin Management**: Staff can upload, preview, and publish results
-- **Audit Trail**: Full logging of all import operations
-- **Secure Access**: Strict ownership guards and permission controls
+- **Student Self-Service**: Students can view published results and apply for rechecks
+- **CSV Import System**: Bulk import students and results with comprehensive validation
+- **Year/Class Management**: Organize students and exams by academic year
+- **Exam Management**: Track exams with recheck deadlines and metadata
+- **Admin Management**: Staff can upload, verify, and publish results
+- **Audit Trail**: Full logging of all operations and status changes
+
+### Analytics & Insights
+- **Exam Aggregates**: Mean, median, standard deviation, pass rates, grade distribution
+- **Component Analysis**: Separate statistics for theory and practical components
+- **Comparison Metrics**: Year-over-year trends and performance analysis
+- **Anomaly Detection**: Automatic flagging of unusual patterns
+- **Dashboard-Ready**: Pre-computed aggregates for Principal, Controller, and HOD views
+
+### Security & Access Control
+- **Token-Based Student Access**: Lightweight authentication for students without Google accounts
+- **Strict Ownership Guards**: Students can only see their own results
+- **Publication Control**: Results hidden until explicitly published
+- **Feature Flags**: Configurable system behavior (FEATURE_RESULTS_ONLY, ALLOW_PUBLISH)
 
 ## Quick Start
 
 ### Prerequisites
 
-- Python 3.10+
+- Python 3.11+ or 3.12
 - PostgreSQL 14+ (SQLite for development)
-- Google Cloud project with OAuth2 credentials
+- Google Cloud project with OAuth2 credentials (optional for admin access)
 
 ### Installation
 
@@ -25,9 +41,7 @@ A secure result portal for PMC students to view their examination results throug
 ```bash
 git clone <repository-url>
 cd Resultportal
-python3 -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
+make install  # or: pip install -r requirements.txt
 ```
 
 2. **Configure environment**:
@@ -38,15 +52,38 @@ cp .env.example .env
 
 3. **Setup database**:
 ```bash
-cd server
-python manage.py migrate
+make migrate  # or: cd server && python manage.py migrate
 python manage.py createsuperuser
 ```
 
 4. **Run development server**:
 ```bash
-python manage.py runserver
+make run  # or: cd server && python manage.py runserver
 ```
+
+5. **Run tests**:
+```bash
+make test  # or: cd server && pytest --cov=apps
+```
+
+## Data Models
+
+### Accounts App
+- **YearClass**: Academic year/class (1st Year, 2nd Year, etc.)
+- **Student**: Student records with year_class, roll_number, contact info
+- **StudentAccessToken**: One-time access tokens for lightweight authentication
+
+### Results App
+- **Exam**: Exam definitions with recheck deadlines and metadata
+- **Result**: Individual subject results with workflow status (DRAFT/SUBMITTED/VERIFIED/PUBLISHED)
+- **ImportBatch**: Audit trail for CSV imports with error/warning tracking
+
+### Analytics App
+- **ExamAggregate**: Statistical summaries (mean, median, std dev, pass rates)
+- **ComponentAggregate**: Component-wise statistics (theory, practical)
+- **ComparisonAggregate**: Year-over-year comparison metrics
+- **TrendAggregate**: Multi-session trend analysis
+- **AnomalyFlag**: Detected anomalies and alerts
 
 ## Usage
 
@@ -92,13 +129,13 @@ resp-2,PMC-001,John Doe,E,2024,Anatomy,80,15,95,A+,2024-01-16
 
 ### Make Commands
 
-Use the Makefile for common operations:
+Common development tasks using the Makefile:
 
 ```bash
-# Setup development environment
-make dev
+# Install dependencies
+make install
 
-# Run migrations
+# Run database migrations
 make migrate
 
 # Create superuser
@@ -107,105 +144,235 @@ make superuser
 # Run development server
 make run
 
+# Run tests with coverage
+make test
+
+# Format code
+make fmt
+
+# Run linters
+make lint
+
 # Collect static files
 make collect
 
 # Import data
 make import-students    # imports students.csv
 make import-results     # imports results.csv
+
+# Compute analytics (when implemented)
+make analytics
 ```
+
+## Result Verification Workflow
+
+Results follow a multi-stage verification workflow:
+
+1. **DRAFT**: Initially created from CSV import
+2. **SUBMITTED**: Assistant submits for verification
+3. **VERIFIED**: Admin verifies the results
+4. **PUBLISHED**: Results made visible to students
+5. **RETURNED**: Admin can return for correction (from SUBMITTED state)
+
+Each status change is logged in the audit trail (`status_log` JSON field).
 
 ## Student Access
 
-Students can access their results at:
-- **Home**: `/` - Login and overview
-- **Profile**: `/me/` - Student information
-- **Results**: `/me/results/` - Published examination results
+### With Google Workspace Account
+Students can login at `/` using their `@pmc.edu.pk` Google account.
 
-## Admin Features
+### With Access Token (Lightweight Auth)
+For students without Google accounts:
+1. Visit `/student-access/` (when implemented)
+2. Enter roll number + email/phone
+3. Receive one-time access token
+4. View published results
+5. Apply for recheck if deadline not passed
 
-Administrators can:
-- Access Django admin at `/admin/`
-- Import CSV files through management commands
-- Publish/unpublish results to control student visibility
-- View audit logs of all import operations
+## Monitoring
 
-## Security Features
+Health check endpoint available at `/healthz`:
 
-- **Domain Restriction**: Only `@pmc.edu.pk` Google accounts allowed
-- **Ownership Guards**: Students can only see their own results
-- **Publication Control**: Results are hidden until explicitly published
-- **Audit Trail**: All imports logged with user, timestamp, and row counts
-- **CSRF Protection**: All forms protected against cross-site attacks
+```bash
+curl http://localhost:8000/healthz
+# {"status": "ok", "database": "connected"}
+```
 
-## Production Deployment
+## Testing
 
-1. **Environment Configuration**:
-   - Set `DEBUG=false`
-   - Configure PostgreSQL database
-   - Set secure `SECRET_KEY`
-   - Configure Google OAuth credentials
+Run the test suite:
 
-2. **Security Settings**:
-   ```bash
-   # Run deployment checks
-   python manage.py check --deploy
-   ```
+```bash
+# All tests with coverage
+make test
 
-3. **Static Files**:
-   ```bash
-   python manage.py collectstatic
-   ```
+# Specific app tests
+cd server
+python manage.py test apps.accounts
+python manage.py test apps.results
+python manage.py test apps.analytics
 
-4. **Process Management**:
-   - Use Gunicorn for WSGI server
-   - Configure Nginx for reverse proxy
-   - Set up systemd service (see `DEPLOY.md`)
+# With pytest
+cd server
+pytest apps/accounts/tests.py -v
+pytest apps/results/tests.py -v
+```
+
+Current test coverage: **42 tests** covering:
+- Model validation and constraints
+- Status workflow transitions
+- CSV import with validation
+- Token generation and expiration
+- Year/Class relationships
+- Audit trail logging
 
 ## Development
 
-### Running Tests
+### Code Quality
 
 ```bash
-# Run all tests
-python manage.py test
+# Format code
+make fmt
 
-# Run specific app tests
-python manage.py test apps.accounts
-python manage.py test apps.results
+# Run linters
+make lint
+
+# Both tools configured in pyproject.toml
 ```
 
-### Project Structure
+### CI/CD
+
+GitHub Actions workflow runs on every push:
+- Matrix build (Python 3.11, 3.12)
+- Linting (ruff, black)
+- Tests with coverage
+- CodeQL security scanning
+
+## Project Structure
 
 ```
-server/
-├── apps/
-│   ├── accounts/        # User and student models
-│   ├── results/         # Results and import models  
-│   └── core/           # Shared utilities
-├── config/             # Django settings
-├── templates/          # HTML templates
-└── manage.py
+Resultportal/
+├── .github/
+│   └── workflows/
+│       └── ci.yml           # GitHub Actions CI pipeline
+├── server/
+│   ├── apps/
+│   │   ├── accounts/        # User, Student, YearClass, AccessToken models
+│   │   ├── results/         # Exam, Result, ImportBatch models + workflow
+│   │   ├── analytics/       # Aggregates, trends, anomaly detection
+│   │   └── core/           # Shared utilities, healthz endpoint
+│   ├── config/             # Django settings, URLs, WSGI
+│   ├── templates/          # HTML templates
+│   ├── static/             # Static assets
+│   └── manage.py
+├── requirements.txt        # Python dependencies
+├── pytest.ini              # Pytest configuration
+├── pyproject.toml          # Tool configurations (ruff, black, pytest)
+├── Makefile                # Common development tasks
+├── .env.example            # Environment variables template
+└── README.md               # This file
 ```
 
-## API Documentation
+## Environment Variables
 
-The application uses Django's built-in views and forms. No REST API is provided in the MVP version.
+Key settings in `.env`:
+
+```bash
+# Core
+DJANGO_SECRET_KEY=your-secret-key
+DJANGO_DEBUG=False
+DJANGO_ALLOWED_HOSTS=your.domain.com,localhost
+
+# Database
+DB_ENGINE=postgresql  # or sqlite
+DB_NAME=result_portal
+DB_USER=db_user
+DB_PASSWORD=db_password
+
+# Google OAuth (for admin access)
+GOOGLE_CLIENT_ID=your-client-id.apps.googleusercontent.com
+GOOGLE_CLIENT_SECRET=your-client-secret
+
+# Feature Flags
+FEATURE_RESULTS_ONLY=false  # Restrict to results-only mode
+ALLOW_PUBLISH=true          # Enable result publishing
+```
+
+## Production Deployment
+
+See `DEPLOY.md` for detailed deployment instructions.
+
+Quick checklist:
+1. Set `DEBUG=false`
+2. Configure PostgreSQL database
+3. Set secure `SECRET_KEY`
+4. Configure `ALLOWED_HOSTS` and `CSRF_TRUSTED_ORIGINS`
+5. Set up Google OAuth credentials
+6. Run `make collect` for static files
+7. Use Gunicorn + Nginx for serving
+8. Set up systemd service for process management
+
+## API Endpoints (Future)
+
+Analytics dashboards (planned):
+```
+/admin/analytics/exams/<id>/snapshot/      # KPI snapshot
+/admin/analytics/exams/<id>/components/     # Component breakdown
+/admin/analytics/exams/<id>/comparisons/    # Year-over-year
+/admin/analytics/years/<year_id>/trends/    # Multi-session trends
+/admin/analytics/exams/<id>/integrity/      # Data quality checks
+/admin/analytics/exams/<id>/governance/     # Governance metrics
+/admin/analytics/exams/<id>/equity/         # Equity analysis
+/admin/analytics/exams/<id>/export.csv      # CSV export
+/admin/analytics/executive.pdf              # Executive summary PDF
+```
+
+## Roadmap
+
+### ✅ Phase 1 - Foundation (Complete)
+- Extended data models with workflow
+- Comprehensive test suite (42 tests)
+- CI/CD pipeline
+- Development tooling
+- Analytics models scaffold
+
+### 🚧 Phase 2 - Import Enhancement (In Progress)
+- Enhanced CSV validation
+- Year/Class integration
+- Exam linking
+- Template generation
+
+### 📋 Phase 3 - Verification UI (Planned)
+- Admin dashboard for pending results
+- Bulk verification actions
+- Audit trail visualization
+
+### 📋 Phase 4 - Student Portal (Planned)
+- Token-based authentication
+- Result viewing
+- Recheck application
+
+### 📋 Phase 5 - Analytics Engine (Planned)
+- Statistical computations
+- Dashboard APIs
+- PDF/CSV exports
 
 ## Contributing
 
 1. Follow Django best practices
-2. Write tests for new features  
-3. Update documentation for changes
-4. Run tests before submitting PRs
+2. Write tests for new features
+3. Run `make fmt` before committing
+4. Ensure `make test` passes
+5. Update documentation
+
+## License
+
+[To be determined]
 
 ## Support
 
 For issues or questions:
-1. Check the audit documentation in `DELIVERABLE_AUDIT.md`
+1. Check documentation in `DELIVERABLE_AUDIT.md`
 2. Review setup instructions in `SETUP.md`
 3. Check deployment guide in `DEPLOY.md`
-
-## License
-
-[Add your license information here]
+4. Review analytics documentation in `ANALYTICS.md` (when available)
