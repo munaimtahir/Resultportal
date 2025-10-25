@@ -82,6 +82,12 @@ class Student(models.Model):
             models.Index(fields=["status"], name="student_status_idx"),
         ]
 
+    def __str__(self) -> str:
+        """Return string representation of Student."""
+        if self.display_name:
+            return f"{self.display_name} ({self.roll_number or self.official_email})"
+        return self.roll_number or self.official_email
+
     @property
     def is_active(self) -> bool:
         """Check if the student is in active status."""
