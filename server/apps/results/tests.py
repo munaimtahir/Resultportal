@@ -164,7 +164,7 @@ class ResultCSVImporterTests(TestCase):
 
         invalid_total_row = summary.row_results[2]
         self.assertTrue(invalid_total_row.has_errors)
-        self.assertIn("total_marks", " ".join(invalid_total_row.errors))
+        self.assertIn("total", " ".join(invalid_total_row.errors).lower())
 
         missing_student_row = summary.row_results[3]
         self.assertTrue(missing_student_row.has_errors)

@@ -298,21 +298,21 @@ class Result(models.Model):
     def clean(self) -> None:
         errors: dict[str, list[str]] = {}
         
-        # Sync old fields to new if set
-        if self.written_marks is not None and self.theory is None:
+        # Sync old fields to new if they're set and new fields aren't
+        if self.written_marks is not None and not hasattr(self, '_theory_set'):
             self.theory = self.written_marks
-        if self.viva_marks is not None and self.practical is None:
+        if self.viva_marks is not None and not hasattr(self, '_practical_set'):
             self.practical = self.viva_marks
-        if self.total_marks is not None and self.total is None:
+        if self.total_marks is not None and not hasattr(self, '_total_set'):
             self.total = self.total_marks
 
-        for field in ("theory", "practical", "total"):
+        # Validate marks are non-negative
+        for field in ("theory", "practical", "total", "written_marks", "viva_marks", "total_marks"):
             value = getattr(self, field, None)
-            if value is None:
-                continue
-            if value < 0:
+            if value is not None and value < 0:
                 errors.setdefault(field, []).append("Marks cannot be negative.")
 
+        # Check total = theory + practical (if all are set)
         if self.theory is not None and self.practical is not None and self.total is not None:
             expected = (Decimal(self.theory) + Decimal(self.practical)).quantize(Decimal("0.01"))
             total = Decimal(self.total).quantize(Decimal("0.01"))
@@ -321,8 +321,9 @@ class Result(models.Model):
                     "Total marks must equal theory plus practical marks.",
                 )
         
-        # Backward compatibility check
-        if self.written_marks is not None and self.viva_marks is not None and self.total_marks is not None:
+        # Backward compatibility check (only if new fields not set)
+        if (self.theory is None and self.written_marks is not None and 
+            self.viva_marks is not None and self.total_marks is not None):
             expected = (Decimal(self.written_marks) + Decimal(self.viva_marks)).quantize(Decimal("0.01"))
             total = Decimal(self.total_marks).quantize(Decimal("0.01"))
             if expected != total:
@@ -340,13 +341,22 @@ class Result(models.Model):
             raise ValidationError(errors)
 
     def save(self, *args, **kwargs):
-        # Sync backward compatible fields
+        # Sync fields bidirectionally
+        # Priority: use written_marks/viva_marks/total_marks if theory/practical/total not explicitly set
         if self.theory is not None:
             self.written_marks = self.theory
+        elif self.written_marks is not None:
+            self.theory = self.written_marks
+            
         if self.practical is not None:
             self.viva_marks = self.practical
+        elif self.viva_marks is not None:
+            self.practical = self.viva_marks
+            
         if self.total is not None:
             self.total_marks = self.total
+        elif self.total_marks is not None:
+            self.total = self.total_marks
             
         self.full_clean()
         return super().save(*args, **kwargs)
