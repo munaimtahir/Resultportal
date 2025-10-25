@@ -58,6 +58,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
@@ -190,6 +191,13 @@ USE_TZ = True
 STATIC_URL = "static/"
 STATIC_ROOT = ROOT_DIR / "static"
 STATICFILES_DIRS = [BASE_DIR / "static"]
+
+# WhiteNoise for efficient static file serving
+STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
+
+# Feature flags
+FEATURE_RESULTS_ONLY = os.getenv("FEATURE_RESULTS_ONLY", "false").lower() == "true"
+ALLOW_PUBLISH = os.getenv("ALLOW_PUBLISH", "true").lower() == "true"
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
