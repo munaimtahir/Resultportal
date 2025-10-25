@@ -90,6 +90,7 @@ class ResultModelTests(TestCase):
         draft = self._build_result(subject="Biochem", published_at=None)
         draft.save()
 
+
 class ResultCSVImporterTests(TestCase):
     def setUp(self) -> None:
         super().setUp()

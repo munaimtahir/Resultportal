@@ -1,17 +1,14 @@
 from __future__ import annotations
 
 """CSV import workflow for examination results."""
-import csv
-from contextlib import nullcontext
+from collections.abc import Iterable
 from datetime import date
 from decimal import Decimal, InvalidOperation
-from typing import IO, Iterable, Optional
 
 from django.core.exceptions import ValidationError
-from django.db import transaction
 
 from apps.accounts.models import Student
-from apps.core.importers import BaseCSVImporter, ImportSummary, RowResult, flatten_validation_errors
+from apps.core.importers import BaseCSVImporter, RowResult, flatten_validation_errors
 
 from .models import ImportBatch, Result
 
@@ -37,7 +34,7 @@ class ResultCSVImporter(BaseCSVImporter):
         """Return the import type for batch creation."""
         return ImportBatch.ImportType.RESULTS
 
-    def _validate_headers(self, headers: Optional[Iterable[str]]) -> None:
+    def _validate_headers(self, headers: Iterable[str] | None) -> None:
         """Validate that required CSV headers are present."""
         if not headers:
             raise ValueError("results.csv must include a header row.")
@@ -54,7 +51,7 @@ class ResultCSVImporter(BaseCSVImporter):
         row_result = RowResult(row_number=row_number, action="skipped", data=normalised)
 
         # Track seen keys within this import
-        if not hasattr(self, '_seen_keys'):
+        if not hasattr(self, "_seen_keys"):
             self._seen_keys: set[tuple[str, str, date]] = set()
 
         errors = self._validate_basic_fields(normalised)
@@ -104,13 +101,9 @@ class ResultCSVImporter(BaseCSVImporter):
             if not changes:
                 row_result.messages.append("No changes detected; record already up to date.")
             elif dry_run:
-                row_result.messages.append(
-                    f"Would apply {len(changes)} field change(s)."
-                )
+                row_result.messages.append(f"Would apply {len(changes)} field change(s).")
             else:
-                row_result.messages.append(
-                    f"Applied {len(changes)} field change(s)."
-                )
+                row_result.messages.append(f"Applied {len(changes)} field change(s).")
             return "updated", 0, 1, 0, row_result
 
     # ------------------------------------------------------------------
@@ -164,9 +157,7 @@ class ResultCSVImporter(BaseCSVImporter):
         key = (row["roll_no"].lower(), row["subject"].lower(), exam_date)
         return payload, key
 
-    def _parse_decimal(
-        self, value: str, field: str, errors: list[str]
-    ) -> Decimal | None:
+    def _parse_decimal(self, value: str, field: str, errors: list[str]) -> Decimal | None:
         try:
             return Decimal(value)
         except (InvalidOperation, ValueError):

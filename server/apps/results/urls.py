@@ -1,6 +1,7 @@
 """URL configuration for results app."""
 
 from django.urls import path
+
 from . import views
 
 urlpatterns = [

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-
 import io
 
 from django.conf import settings
@@ -219,8 +218,12 @@ PMC-003,Charlie,Brown,Charlie Brown,charlie@gmail.com,,b29,active
         for input_status, expected in test_cases:
             result = importer._normalize_status(input_status)
             self.assertIsInstance(result, str, f"Result should be string, got {type(result)}")
-            self.assertEqual(result, expected, f"Input {input_status!r} should normalize to {expected!r}")
-            self.assertIn(result, Student.Status.values, f"Result {result!r} should be a valid status")
+            self.assertEqual(
+                result, expected, f"Input {input_status!r} should normalize to {expected!r}"
+            )
+            self.assertIn(
+                result, Student.Status.values, f"Result {result!r} should be a valid status"
+            )
 
         test_importer = StudentCSVImporter(
             io.StringIO(

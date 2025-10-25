@@ -2,16 +2,15 @@
 
 from __future__ import annotations
 
-
 from django.conf import settings
 from django.core.validators import RegexValidator
-from django.db import models 
+from django.db import models
 
 
 class StudentQuerySet(models.QuerySet["Student"]):
     """Custom queryset with helpers used by the importer and pipeline."""
 
-    def active(self) -> "StudentQuerySet":
+    def active(self) -> StudentQuerySet:
         """Return only students whose status is ``ACTIVE``."""
 
         return self.filter(status=Student.Status.ACTIVE)
@@ -76,7 +75,6 @@ class Student(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
-
     class Meta:
         ordering = ("official_email",)
         indexes = [
@@ -88,4 +86,3 @@ class Student(models.Model):
     def is_active(self) -> bool:
         """Check if the student is in active status."""
         return self.status == self.Status.ACTIVE
-

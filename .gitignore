@@ -21,3 +21,18 @@ db.sqlite3
 .idea/
 .DS_Store
 venv/
+
+# Testing & Coverage
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+*.cover
+
+# Logs
+logs/
+
+# Build artifacts
+dist/
+build/
+*.egg-info/
