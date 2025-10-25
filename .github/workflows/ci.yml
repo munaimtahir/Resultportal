@@ -6,10 +6,15 @@ on:
   pull_request:
     branches: [ main, develop ]
 
+permissions:
+  contents: read
+
 jobs:
   lint:
     name: Lint and Format Check
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     
     steps:
     - uses: actions/checkout@v4
@@ -37,6 +42,8 @@ jobs:
   test:
     name: Test (Python ${{ matrix.python-version }})
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     strategy:
       fail-fast: false
       matrix:
@@ -84,6 +91,8 @@ jobs:
   build:
     name: Build Check
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     needs: [lint, test]
     
     steps:
