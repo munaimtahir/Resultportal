@@ -79,7 +79,7 @@ class ImportBatch(models.Model):
 
 
 class ResultQuerySet(models.QuerySet):
-    def published(self) -> "ResultQuerySet":
+    def published(self) -> ResultQuerySet:
         return self.filter(published_at__isnull=False)
 
 
@@ -144,8 +144,14 @@ class Result(models.Model):
             if value < 0:
                 errors.setdefault(field, []).append("Marks cannot be negative.")
 
-        if self.written_marks is not None and self.viva_marks is not None and self.total_marks is not None:
-            expected = (Decimal(self.written_marks) + Decimal(self.viva_marks)).quantize(Decimal("0.01"))
+        if (
+            self.written_marks is not None
+            and self.viva_marks is not None
+            and self.total_marks is not None
+        ):
+            expected = (Decimal(self.written_marks) + Decimal(self.viva_marks)).quantize(
+                Decimal("0.01")
+            )
             total = Decimal(self.total_marks).quantize(Decimal("0.01"))
             if expected != total:
                 errors.setdefault("total_marks", []).append(

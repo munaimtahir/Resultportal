@@ -1,22 +1,62 @@
-.PHONY: dev migrate superuser run collect import-students import-results
+.PHONY: install fmt lint test migrate superuser run collect import-students import-results clean help
 
-dev:
-	python -m venv venv && . venv/bin/activate && pip install -r requirements.txt || true
+help:  ## Show this help message
+	@echo "Available commands:"
+	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-20s\033[0m %s\n", $$1, $$2}'
 
-migrate:
-	cd server && python manage.py migrate
+install:  ## Install dependencies in virtual environment
+	python -m venv .venv
+	. .venv/bin/activate && pip install --upgrade pip setuptools wheel
+	. .venv/bin/activate && pip install -r requirements.txt
 
-superuser:
-	cd server && python manage.py createsuperuser
+fmt:  ## Format code with black and isort
+	. .venv/bin/activate && black server/
+	. .venv/bin/activate && isort server/
 
-run:
-	cd server && python manage.py runserver 0.0.0.0:8000
+lint:  ## Run linters (ruff, black check, isort check)
+	. .venv/bin/activate && ruff check server/
+	. .venv/bin/activate && black --check server/
+	. .venv/bin/activate && isort --check-only server/
 
-collect:
-	cd server && python manage.py collectstatic --noinput
+test:  ## Run tests with coverage
+	. .venv/bin/activate && pytest
 
-import-students:
-	cd server && python manage.py import_students ../students.csv
+test-fast:  ## Run tests without coverage
+	. .venv/bin/activate && pytest --no-cov
 
-import-results:
-	cd server && python manage.py import_results ../results.csv
+migrate:  ## Run Django migrations
+	. .venv/bin/activate && cd server && python manage.py migrate
+
+makemigrations:  ## Create new migrations
+	. .venv/bin/activate && cd server && python manage.py makemigrations
+
+superuser:  ## Create Django superuser
+	. .venv/bin/activate && cd server && python manage.py createsuperuser
+
+run:  ## Run development server
+	. .venv/bin/activate && cd server && python manage.py runserver 0.0.0.0:8000
+
+collect:  ## Collect static files
+	. .venv/bin/activate && cd server && python manage.py collectstatic --noinput
+
+import-students:  ## Import students from CSV (use FILE=path/to/file.csv)
+	. .venv/bin/activate && cd server && python manage.py import_students $(FILE) --commit
+
+import-students-dry-run:  ## Preview student import (use FILE=path/to/file.csv)
+	. .venv/bin/activate && cd server && python manage.py import_students $(FILE) --dry-run
+
+import-results:  ## Import results from CSV (use FILE=path/to/file.csv)
+	. .venv/bin/activate && cd server && python manage.py import_results $(FILE) --commit
+
+import-results-dry-run:  ## Preview results import (use FILE=path/to/file.csv)
+	. .venv/bin/activate && cd server && python manage.py import_results $(FILE) --dry-run
+
+clean:  ## Clean build artifacts and caches
+	find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
+	find . -type f -name "*.pyc" -delete
+	find . -type f -name "*.pyo" -delete
+	rm -rf .pytest_cache htmlcov .coverage
+	rm -rf build dist *.egg-info
+
+check:  ## Run Django system checks
+	. .venv/bin/activate && cd server && python manage.py check
