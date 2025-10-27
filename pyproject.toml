@@ -22,6 +22,16 @@ known_first_party = ["apps", "config"]
 known_django = ["django"]
 sections = ["FUTURE", "STDLIB", "DJANGO", "THIRDPARTY", "FIRSTPARTY", "LOCALFOLDER"]
 
+[tool.flake8]
+max-line-length = 100
+extend-exclude = [
+    "*/migrations/*",
+    "venv",
+    ".venv",
+    "build",
+    "dist",
+]
+
 [tool.ruff]
 line-length = 100
 target-version = "py311"

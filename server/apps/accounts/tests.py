@@ -21,17 +21,17 @@ class YearClassModelTests(TestCase):
         year3 = YearClass.objects.create(label="3rd Year", order=3)
         year1 = YearClass.objects.create(label="1st Year", order=1)
         year2 = YearClass.objects.create(label="2nd Year", order=2)
-        
+
         years = list(YearClass.objects.all())
         self.assertEqual(years, [year1, year2, year3])
-    
+
     def test_unique_label_and_order(self) -> None:
         """Test that label and order must be unique."""
         YearClass.objects.create(label="1st Year", order=1)
-        
+
         with self.assertRaises(Exception):  # IntegrityError
             YearClass.objects.create(label="1st Year", order=2)
-        
+
         with self.assertRaises(Exception):  # IntegrityError
             YearClass.objects.create(label="First Year", order=1)
 
@@ -43,48 +43,48 @@ class StudentAccessTokenTests(TestCase):
             roll_number="PMC-001",
             display_name="Test Student",
         )
-    
+
     def test_token_generation(self) -> None:
         """Test generating an access token."""
         token = StudentAccessToken.generate_for_student(self.student)
-        
+
         self.assertEqual(token.student, self.student)
         self.assertIsNotNone(token.code)
         self.assertTrue(len(token.code) > 20)
         self.assertGreater(token.expires_at, timezone.now())
         self.assertIsNone(token.used_at)
-    
+
     def test_token_validity_check(self) -> None:
         """Test token validity checking."""
         token = StudentAccessToken.generate_for_student(self.student, validity_hours=24)
-        
+
         self.assertTrue(token.is_valid())
-    
+
     def test_expired_token(self) -> None:
         """Test expired token is not valid."""
         token = StudentAccessToken.generate_for_student(self.student, validity_hours=0)
         token.expires_at = timezone.now() - timedelta(hours=1)
         token.save()
-        
+
         self.assertFalse(token.is_valid())
-    
+
     def test_used_token(self) -> None:
         """Test used token is not valid."""
         token = StudentAccessToken.generate_for_student(self.student)
         token.mark_used()
-        
+
         self.assertFalse(token.is_valid())
         self.assertIsNotNone(token.used_at)
-    
+
     def test_mark_used_idempotent(self) -> None:
         """Test that marking as used multiple times is safe."""
         token = StudentAccessToken.generate_for_student(self.student)
         token.mark_used()
         used_at_1 = token.used_at
-        
+
         token.mark_used()
         used_at_2 = token.used_at
-        
+
         self.assertEqual(used_at_1, used_at_2)
 
 
@@ -105,7 +105,7 @@ class StudentModelTests(TestCase):
         self.assertNotIn(inactive, Student.objects.active())
         self.assertTrue(active.is_active)
         self.assertFalse(inactive.is_active)
-    
+
     def test_year_class_relationship(self) -> None:
         """Test student can be assigned to a year class."""
         year_class = YearClass.objects.create(label="2nd Year", order=2)
@@ -114,10 +114,10 @@ class StudentModelTests(TestCase):
             roll_number="PMC-001",
             year_class=year_class,
         )
-        
+
         self.assertEqual(student.year_class, year_class)
         self.assertIn(student, year_class.students.all())
-    
+
     def test_unique_year_class_roll_number(self) -> None:
         """Test that roll_number must be unique within a year_class."""
         year_class = YearClass.objects.create(label="2nd Year", order=2)
@@ -126,7 +126,7 @@ class StudentModelTests(TestCase):
             roll_number="PMC-001",
             year_class=year_class,
         )
-        
+
         # Same roll in same year should fail
         with self.assertRaises(Exception):  # IntegrityError
             Student.objects.create(
@@ -134,6 +134,7 @@ class StudentModelTests(TestCase):
                 roll_number="PMC-001",
                 year_class=year_class,
             )
+
 
 class WorkspacePipelineTests(TestCase):
     def setUp(self) -> None:
@@ -211,7 +212,7 @@ class WorkspacePipelineTests(TestCase):
             username="bob",
             email=self.details["email"],
         )
-        student = Student.objects.create(
+        Student.objects.create(
             official_email=self.details["email"],
             roll_number="PMC-001",
             user=original_user,
@@ -280,11 +281,26 @@ class StudentCSVImporterTests(TestCase):
             batch_code="b28",
         )
 
-        self.csv_payload = """roll_no,first_name,last_name,display_name,official_email,recovery_email,batch_code,status
-PMC-001,Alice,Smith,Alice Smith,alice@pmc.edu.pk,,b29,active
-PMC-002,Bob,Jones,Bob Jones,bob@pmc.edu.pk,,b29,active
-PMC-003,Charlie,Brown,Charlie Brown,charlie@gmail.com,,b29,active
-"""
+        self.csv_payload = "\n".join(
+            [
+                ",".join(
+                    [
+                        "roll_no",
+                        "first_name",
+                        "last_name",
+                        "display_name",
+                        "official_email",
+                        "recovery_email",
+                        "batch_code",
+                        "status",
+                    ]
+                ),
+                "PMC-001,Alice,Smith,Alice Smith,alice@pmc.edu.pk,,b29,active",
+                "PMC-002,Bob,Jones,Bob Jones,bob@pmc.edu.pk,,b29,active",
+                "PMC-003,Charlie,Brown,Charlie Brown,charlie@gmail.com,,b29,active",
+                "",
+            ]
+        )
 
     def _build_stream(self) -> io.StringIO:
         return io.StringIO(self.csv_payload)
@@ -445,7 +461,7 @@ PMC-003,Charlie,Brown,Charlie Brown,charlie@gmail.com,,b29,active
     def test_no_changes_detected(self):
         """Test that updating with no changes is handled."""
         # Create a student with all fields set
-        existing = Student.objects.create(
+        Student.objects.create(
             roll_number="PMC-500",
             first_name="Same",
             last_name="Student",

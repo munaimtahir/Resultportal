@@ -6,7 +6,7 @@ from .models import Exam, ImportBatch, Result
 @admin.register(Exam)
 class ExamAdmin(admin.ModelAdmin):
     """Configuration for managing exams in the Django admin."""
-    
+
     list_display = (
         "code",
         "title",
@@ -20,22 +20,15 @@ class ExamAdmin(admin.ModelAdmin):
     search_fields = ("code", "title", "block_letter")
     ordering = ("-exam_date", "code")
     readonly_fields = ("created_at", "updated_at")
-    
+
     fieldsets = (
-        ("Basic Information", {
-            "fields": ("year_class", "code", "title", "kind")
-        }),
-        ("Exam Details", {
-            "fields": ("block_letter", "exam_date")
-        }),
-        ("Recheck Information", {
-            "fields": ("recheck_form_url", "recheck_deadline"),
-            "classes": ("collapse",)
-        }),
-        ("Metadata", {
-            "fields": ("created_at", "updated_at"),
-            "classes": ("collapse",)
-        }),
+        ("Basic Information", {"fields": ("year_class", "code", "title", "kind")}),
+        ("Exam Details", {"fields": ("block_letter", "exam_date")}),
+        (
+            "Recheck Information",
+            {"fields": ("recheck_form_url", "recheck_deadline"), "classes": ("collapse",)},
+        ),
+        ("Metadata", {"fields": ("created_at", "updated_at"), "classes": ("collapse",)}),
     )
 
 
@@ -79,33 +72,27 @@ class ResultAdmin(admin.ModelAdmin):
         "exam__code",
     )
     readonly_fields = ("created_at", "updated_at", "verified_at", "published_at")
-    
+
     fieldsets = (
-        ("Student Information", {
-            "fields": ("student", "roll_number", "name")
-        }),
-        ("Exam Information", {
-            "fields": ("exam", "subject", "year", "block", "exam_date")
-        }),
-        ("Marks", {
-            "fields": (("theory", "practical", "total"), "grade")
-        }),
-        ("Workflow", {
-            "fields": ("status", "verified_by", "verified_at", "published_at"),
-            "classes": ("collapse",)
-        }),
-        ("Import Details", {
-            "fields": ("import_batch", "respondent_id"),
-            "classes": ("collapse",)
-        }),
-        ("Audit Trail", {
-            "fields": ("status_log", "created_at", "updated_at"),
-            "classes": ("collapse",)
-        }),
+        ("Student Information", {"fields": ("student", "roll_number", "name")}),
+        ("Exam Information", {"fields": ("exam", "subject", "year", "block", "exam_date")}),
+        ("Marks", {"fields": (("theory", "practical", "total"), "grade")}),
+        (
+            "Workflow",
+            {
+                "fields": ("status", "verified_by", "verified_at", "published_at"),
+                "classes": ("collapse",),
+            },
+        ),
+        ("Import Details", {"fields": ("import_batch", "respondent_id"), "classes": ("collapse",)}),
+        (
+            "Audit Trail",
+            {"fields": ("status_log", "created_at", "updated_at"), "classes": ("collapse",)},
+        ),
     )
-    
+
     actions = ["publish_results", "unpublish_results", "verify_results"]
-    
+
     def publish_results(self, request, queryset):
         """Bulk publish selected results."""
         count = 0
@@ -114,8 +101,9 @@ class ResultAdmin(admin.ModelAdmin):
                 result.publish(request.user)
                 count += 1
         self.message_user(request, f"Published {count} result(s).")
+
     publish_results.short_description = "Publish selected results"
-    
+
     def unpublish_results(self, request, queryset):
         """Bulk unpublish selected results."""
         count = 0
@@ -124,8 +112,9 @@ class ResultAdmin(admin.ModelAdmin):
                 result.unpublish(request.user)
                 count += 1
         self.message_user(request, f"Unpublished {count} result(s).")
+
     unpublish_results.short_description = "Unpublish selected results"
-    
+
     def verify_results(self, request, queryset):
         """Bulk verify selected results."""
         count = 0
@@ -134,4 +123,5 @@ class ResultAdmin(admin.ModelAdmin):
                 result.verify(request.user)
                 count += 1
         self.message_user(request, f"Verified {count} result(s).")
+
     verify_results.short_description = "Verify selected results"
