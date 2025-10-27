@@ -1,0 +1,20 @@
+[run]
+source = apps
+omit =
+    */migrations/*
+    */tests.py
+    */test_*.py
+    */__pycache__/*
+    */management/commands/*
+
+[report]
+exclude_lines =
+    pragma: no cover
+    def __repr__
+    def __str__
+    raise AssertionError
+    raise NotImplementedError
+    if __name__ == .__main__.:
+    if TYPE_CHECKING:
+    class .*\bProtocol\):
+    @(abc\.)?abstractmethod

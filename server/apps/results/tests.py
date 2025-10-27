@@ -170,6 +170,15 @@ class ImportBatchModelTests(TestCase):
 
 class ResultModelTests(TestCase):
     def setUp(self) -> None:
+        from django.contrib.auth import get_user_model
+        
+        User = get_user_model()
+        self.staff_user = User.objects.create_user(
+            username="admin", 
+            email="admin@pmc.edu.pk",
+            is_staff=True
+        )
+        
         self.year_class = YearClass.objects.create(label="2nd Year", order=2)
         self.student = Student.objects.create(
             year_class=self.year_class,
@@ -239,19 +248,15 @@ class ResultModelTests(TestCase):
 
     def test_result_status_workflow_verify(self) -> None:
         """Test verifying a submitted result."""
-        user = get_user_model().objects.create_user(
-            username="admin",
-            email="admin@pmc.edu.pk",
-        )
         result = self._build_result()
         result.save()
         result.submit()
 
-        result.verify(user)
+        result.verify(self.staff_user)
         result.refresh_from_db()
 
         self.assertEqual(result.status, Result.ResultStatus.VERIFIED)
-        self.assertEqual(result.verified_by, user)
+        self.assertEqual(result.verified_by, self.staff_user)
         self.assertIsNotNone(result.verified_at)
 
     def test_result_status_workflow_return(self) -> None:
@@ -267,16 +272,12 @@ class ResultModelTests(TestCase):
 
     def test_result_status_workflow_publish(self) -> None:
         """Test publishing a verified result."""
-        user = get_user_model().objects.create_user(
-            username="admin",
-            email="admin@pmc.edu.pk",
-        )
         result = self._build_result()
         result.save()
         result.submit()
-        result.verify(user)
+        result.verify(self.staff_user)
 
-        result.publish(user)
+        result.publish(self.staff_user)
         result.refresh_from_db()
 
         self.assertEqual(result.status, Result.ResultStatus.PUBLISHED)
@@ -285,17 +286,13 @@ class ResultModelTests(TestCase):
 
     def test_result_status_workflow_unpublish(self) -> None:
         """Test unpublishing a published result."""
-        user = get_user_model().objects.create_user(
-            username="admin",
-            email="admin@pmc.edu.pk",
-        )
         result = self._build_result()
         result.save()
         result.submit()
-        result.verify(user)
-        result.publish(user)
+        result.verify(self.staff_user)
+        result.publish(self.staff_user)
 
-        result.unpublish(user)
+        result.unpublish(self.staff_user)
         result.refresh_from_db()
 
         self.assertEqual(result.status, Result.ResultStatus.VERIFIED)
@@ -326,6 +323,9 @@ class ResultModelTests(TestCase):
         self.assertIsNone(result.published_at)
         self.assertFalse(result.is_published)
 
+        # Follow the workflow: DRAFT -> SUBMITTED -> VERIFIED -> PUBLISHED
+        result.submit()
+        result.verify(self.staff_user)
         result.publish()
         result.refresh_from_db()
         self.assertIsNotNone(result.published_at)
@@ -335,6 +335,9 @@ class ResultModelTests(TestCase):
         """Test that calling publish() multiple times is safe."""
         result = self._build_result()
         result.save()
+        # Follow the workflow: DRAFT -> SUBMITTED -> VERIFIED -> PUBLISHED
+        result.submit()
+        result.verify(self.staff_user)
         result.publish()
         first_published_at = result.published_at
 
@@ -345,7 +348,7 @@ class ResultModelTests(TestCase):
 
     def test_unpublish_method_clears_timestamp(self):
         """Test that unpublish() clears published_at timestamp."""
-        result = self._build_result(published_at=timezone.now())
+        result = self._build_result(published_at=timezone.now(), status=Result.ResultStatus.PUBLISHED)
         result.save()
         self.assertTrue(result.is_published)
 
@@ -363,6 +366,62 @@ class ResultModelTests(TestCase):
         result.unpublish()
         result.refresh_from_db()
         self.assertIsNone(result.published_at)
+
+    def test_by_status_queryset_filter(self):
+        """Test the by_status queryset filter."""
+        result1 = self._build_result(subject="Anatomy")
+        result1.save()
+        result1.submit()
+        
+        result2 = self._build_result(subject="Biochem")
+        result2.save()
+        
+        submitted = Result.objects.by_status(Result.ResultStatus.SUBMITTED)
+        draft = Result.objects.by_status(Result.ResultStatus.DRAFT)
+        
+        self.assertIn(result1, submitted)
+        self.assertNotIn(result2, submitted)
+        self.assertIn(result2, draft)
+        self.assertNotIn(result1, draft)
+
+    def test_status_log_initialization(self):
+        """Test that status_log gets initialized if not a list."""
+        result = self._build_result()
+        result.save()
+        # Directly modify the status_log to a non-list value in memory
+        result.status_log = {}  # Use dict instead of None
+        result.submit()
+        result.refresh_from_db()
+        self.assertIsInstance(result.status_log, list)
+        self.assertTrue(len(result.status_log) > 0)
+
+    def test_sync_marks_with_flags(self):
+        """Test the sync_marks_with_flags utility method."""
+        result = self._build_result(
+            written_marks=Decimal("70.00"),
+            viva_marks=Decimal("20.00"),
+            total_marks=Decimal("90.00")
+        )
+        result.sync_marks_with_flags()
+        result.save()
+        
+        self.assertEqual(result.theory, Decimal("70.00"))
+        self.assertEqual(result.practical, Decimal("20.00"))
+        self.assertEqual(result.total, Decimal("90.00"))
+
+    def test_clean_with_null_marks(self):
+        """Test that clean handles null marks properly."""
+        result = self._build_result(
+            written_marks=None,
+            viva_marks=None,
+            total_marks=None,
+            theory=Decimal("70.00"),
+            practical=Decimal("20.00"),
+            total=Decimal("90.00")
+        )
+        # Should not raise ValidationError for null legacy marks
+        result.full_clean()
+        self.assertEqual(result.theory, Decimal("70.00"))
 
 
 class ResultCSVImporterTests(TestCase):
@@ -721,7 +780,7 @@ class StudentResultsViewTests(TestCase):
         """Test that only published results are shown."""
         from django.utils import timezone
 
-        # Create published result
+        # Create published result (with proper workflow status)
         published = Result.objects.create(
             student=self.student,
             import_batch=self.batch,
@@ -736,6 +795,7 @@ class StudentResultsViewTests(TestCase):
             grade="A",
             exam_date=date(2025, 1, 15),
             published_at=timezone.now(),
+            status=Result.ResultStatus.PUBLISHED,
         )
 
         # Create unpublished result

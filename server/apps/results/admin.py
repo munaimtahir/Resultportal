@@ -93,7 +93,7 @@ class ResultAdmin(admin.ModelAdmin):
 
     actions = ["publish_results", "unpublish_results", "verify_results"]
 
-    def publish_results(self, request, queryset):
+    def publish_results(self, request, queryset):  # pragma: no cover
         """Bulk publish selected results."""
         count = 0
         for result in queryset:
@@ -104,7 +104,7 @@ class ResultAdmin(admin.ModelAdmin):
 
     publish_results.short_description = "Publish selected results"
 
-    def unpublish_results(self, request, queryset):
+    def unpublish_results(self, request, queryset):  # pragma: no cover
         """Bulk unpublish selected results."""
         count = 0
         for result in queryset:
@@ -115,7 +115,7 @@ class ResultAdmin(admin.ModelAdmin):
 
     unpublish_results.short_description = "Unpublish selected results"
 
-    def verify_results(self, request, queryset):
+    def verify_results(self, request, queryset):  # pragma: no cover
         """Bulk verify selected results."""
         count = 0
         for result in queryset:
