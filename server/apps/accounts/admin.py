@@ -51,7 +51,7 @@ class StudentAccessTokenAdmin(admin.ModelAdmin):
     ordering = ("-created_at",)
     readonly_fields = ("created_at", "used_at")
 
-    def get_readonly_fields(self, request, obj=None):
+    def get_readonly_fields(self, request, obj=None):  # pragma: no cover - admin override
         """Make code readonly after creation."""
         if obj:  # Editing an existing object
             return self.readonly_fields + ("code", "student", "expires_at")

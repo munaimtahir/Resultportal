@@ -321,7 +321,7 @@ class ResultModelTests(TestCase):
 
     def test_publish_method_sets_timestamp(self):
         """Test that publish() sets published_at timestamp."""
-        result = self._build_result()
+        result = self._build_result(status=Result.ResultStatus.VERIFIED)
         result.save()
         self.assertIsNone(result.published_at)
         self.assertFalse(result.is_published)
@@ -333,7 +333,7 @@ class ResultModelTests(TestCase):
 
     def test_publish_method_idempotent(self):
         """Test that calling publish() multiple times is safe."""
-        result = self._build_result()
+        result = self._build_result(status=Result.ResultStatus.VERIFIED)
         result.save()
         result.publish()
         first_published_at = result.published_at
@@ -345,7 +345,10 @@ class ResultModelTests(TestCase):
 
     def test_unpublish_method_clears_timestamp(self):
         """Test that unpublish() clears published_at timestamp."""
-        result = self._build_result(published_at=timezone.now())
+        result = self._build_result(
+            status=Result.ResultStatus.PUBLISHED,
+            published_at=timezone.now()
+        )
         result.save()
         self.assertTrue(result.is_published)
 
@@ -735,6 +738,7 @@ class StudentResultsViewTests(TestCase):
             total_marks=Decimal("90.00"),
             grade="A",
             exam_date=date(2025, 1, 15),
+            status=Result.ResultStatus.PUBLISHED,
             published_at=timezone.now(),
         )
 
@@ -752,6 +756,7 @@ class StudentResultsViewTests(TestCase):
             total_marks=Decimal("100.00"),
             grade="A+",
             exam_date=date(2025, 1, 16),
+            status=Result.ResultStatus.DRAFT,
             published_at=None,
         )
 
