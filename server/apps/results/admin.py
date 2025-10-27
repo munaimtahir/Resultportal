@@ -2,6 +2,7 @@
 
 import csv
 
+from django.conf import settings
 from django.contrib import admin
 from django.http import HttpResponse
 
@@ -128,6 +129,15 @@ class ResultAdmin(admin.ModelAdmin):
 
     def publish_results(self, request, queryset):  # pragma: no cover - admin action
         """Bulk publish selected results (VERIFIED → PUBLISHED)."""
+        # Check if publishing is allowed
+        if not getattr(settings, "ALLOW_PUBLISH", True):
+            self.message_user(
+                request,
+                "Publishing is currently disabled via ALLOW_PUBLISH feature flag.",
+                level="error",
+            )
+            return
+
         count = 0
         for result in queryset:
             if result.status == result.ResultStatus.VERIFIED:

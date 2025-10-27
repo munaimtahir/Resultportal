@@ -1,7 +1,8 @@
 """Tests for core application functionality."""
 
+from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
 from apps.core.importers import flatten_validation_errors
 
@@ -80,3 +81,77 @@ class ImportSummaryTests(TestCase):
         )
 
         self.assertFalse(summary.has_errors)
+
+
+class FeatureResultsOnlyMiddlewareTests(TestCase):
+    """Tests for FeatureResultsOnlyMiddleware."""
+
+    def setUp(self):
+        self.user = get_user_model().objects.create_user(
+            username="testuser",
+            email="test@pmc.edu.pk",
+            is_staff=True,
+        )
+
+    @override_settings(
+        FEATURE_RESULTS_ONLY=True,
+        MIDDLEWARE=[
+            "django.middleware.security.SecurityMiddleware",
+            "whitenoise.middleware.WhiteNoiseMiddleware",
+            "django.contrib.sessions.middleware.SessionMiddleware",
+            "django.middleware.common.CommonMiddleware",
+            "django.middleware.csrf.CsrfViewMiddleware",
+            "django.contrib.auth.middleware.AuthenticationMiddleware",
+            "django.contrib.messages.middleware.MessageMiddleware",
+            "django.middleware.clickjacking.XFrameOptionsMiddleware",
+            "apps.core.middleware.FeatureResultsOnlyMiddleware",
+        ],
+    )
+    def test_feature_results_only_allows_whitelisted_paths(self):
+        """Test that FEATURE_RESULTS_ONLY allows whitelisted paths."""
+        self.client.force_login(self.user)
+
+        # These should be allowed (will return 404 or redirect, but not 403)
+        allowed_paths = [
+            "/admin/",
+            "/accounts/login/",
+            "/me/",
+            "/healthz",
+            "/import/students/upload/",
+        ]
+
+        for path in allowed_paths:
+            response = self.client.get(path)
+            # These will return 404, 302, or 200, but not 403
+            self.assertNotEqual(
+                response.status_code,
+                403,
+                f"Path {path} should be allowed but got 403",
+            )
+
+    @override_settings(
+        FEATURE_RESULTS_ONLY=True,
+        MIDDLEWARE=[
+            "django.middleware.security.SecurityMiddleware",
+            "whitenoise.middleware.WhiteNoiseMiddleware",
+            "django.contrib.sessions.middleware.SessionMiddleware",
+            "django.middleware.common.CommonMiddleware",
+            "django.middleware.csrf.CsrfViewMiddleware",
+            "django.contrib.auth.middleware.AuthenticationMiddleware",
+            "django.contrib.messages.middleware.MessageMiddleware",
+            "django.middleware.clickjacking.XFrameOptionsMiddleware",
+            "apps.core.middleware.FeatureResultsOnlyMiddleware",
+        ],
+    )
+    def test_feature_results_only_blocks_other_paths(self):
+        """Test that FEATURE_RESULTS_ONLY blocks non-whitelisted paths."""
+        # This should be blocked
+        response = self.client.get("/some/other/path/")
+        self.assertEqual(response.status_code, 403)
+
+    @override_settings(FEATURE_RESULTS_ONLY=False)
+    def test_feature_disabled_allows_all_paths(self):
+        """Test that when FEATURE_RESULTS_ONLY is disabled, all paths are allowed."""
+        # Should return 404 (not found) not 403 (forbidden)
+        response = self.client.get("/some/other/path/")
+        self.assertEqual(response.status_code, 404)

@@ -1032,3 +1032,180 @@ class CSVImportViewTests(TestCase):
         self.assertIsNotNone(student)
         self.assertEqual(student.first_name, "Alice")
         self.assertEqual(student.year_class, self.year_class)
+
+
+class BackfillResultStatusCommandTests(TestCase):
+    """Tests for the backfill_result_status management command."""
+
+    def setUp(self):
+        self.year_class = YearClass.objects.create(label="2nd Year", order=2)
+        self.exam = Exam.objects.create(
+            year_class=self.year_class,
+            code="BLOCK-E-2025",
+            title="Block E",
+            kind=Exam.ExamKind.BLOCK,
+            exam_date=date(2025, 1, 15),
+        )
+        self.batch = ImportBatch.objects.create(
+            import_type=ImportBatch.ImportType.RESULTS,
+            exam=self.exam,
+        )
+        self.student = Student.objects.create(
+            roll_number="PMC-101",
+            first_name="Test",
+            last_name="Student",
+            display_name="Test Student",
+            official_email="test@pmc.edu.pk",
+            year_class=self.year_class,
+        )
+
+    def test_backfill_updates_results_with_published_at_but_not_published_status(self):
+        """Test that backfill command updates results correctly."""
+        from io import StringIO
+
+        from django.core.management import call_command
+
+        # Create results with published_at but status != PUBLISHED
+        result1 = Result.objects.create(
+            student=self.student,
+            exam=self.exam,
+            import_batch=self.batch,
+            roll_number=self.student.roll_number,
+            name="Test Student",
+            block="E",
+            year=2025,
+            subject="Anatomy",
+            written_marks=Decimal("70.00"),
+            viva_marks=Decimal("20.00"),
+            total_marks=Decimal("90.00"),
+            grade="A",
+            exam_date=date(2025, 1, 15),
+            status=Result.ResultStatus.VERIFIED,
+            published_at=timezone.now(),
+        )
+
+        result2 = Result.objects.create(
+            student=self.student,
+            exam=self.exam,
+            import_batch=self.batch,
+            roll_number=self.student.roll_number,
+            name="Test Student",
+            block="E",
+            year=2025,
+            subject="Physiology",
+            written_marks=Decimal("80.00"),
+            viva_marks=Decimal("15.00"),
+            total_marks=Decimal("95.00"),
+            grade="A+",
+            exam_date=date(2025, 1, 15),
+            status=Result.ResultStatus.DRAFT,
+            published_at=timezone.now(),
+        )
+
+        # Create result without published_at (should not be updated)
+        result3 = Result.objects.create(
+            student=self.student,
+            exam=self.exam,
+            import_batch=self.batch,
+            roll_number=self.student.roll_number,
+            name="Test Student",
+            block="E",
+            year=2025,
+            subject="Pathology",
+            written_marks=Decimal("60.00"),
+            viva_marks=Decimal("25.00"),
+            total_marks=Decimal("85.00"),
+            grade="B+",
+            exam_date=date(2025, 1, 15),
+            status=Result.ResultStatus.DRAFT,
+        )
+
+        # Run backfill command
+        out = StringIO()
+        call_command("backfill_result_status", stdout=out)
+
+        # Refresh from database
+        result1.refresh_from_db()
+        result2.refresh_from_db()
+        result3.refresh_from_db()
+
+        # Check that result1 and result2 are now PUBLISHED
+        self.assertEqual(result1.status, Result.ResultStatus.PUBLISHED)
+        self.assertEqual(result2.status, Result.ResultStatus.PUBLISHED)
+
+        # Check that result3 is still DRAFT
+        self.assertEqual(result3.status, Result.ResultStatus.DRAFT)
+
+        # Check output
+        self.assertIn("2 result(s) to PUBLISHED status", out.getvalue())
+
+    def test_backfill_dry_run_does_not_update(self):
+        """Test that backfill command in dry-run mode does not update."""
+        from io import StringIO
+
+        from django.core.management import call_command
+
+        # Create result with published_at but status != PUBLISHED
+        result = Result.objects.create(
+            student=self.student,
+            exam=self.exam,
+            import_batch=self.batch,
+            roll_number=self.student.roll_number,
+            name="Test Student",
+            block="E",
+            year=2025,
+            subject="Anatomy",
+            written_marks=Decimal("70.00"),
+            viva_marks=Decimal("20.00"),
+            total_marks=Decimal("90.00"),
+            grade="A",
+            exam_date=date(2025, 1, 15),
+            status=Result.ResultStatus.VERIFIED,
+            published_at=timezone.now(),
+        )
+
+        # Run backfill command in dry-run mode
+        out = StringIO()
+        call_command("backfill_result_status", "--dry-run", stdout=out)
+
+        # Refresh from database
+        result.refresh_from_db()
+
+        # Check that status is still VERIFIED
+        self.assertEqual(result.status, Result.ResultStatus.VERIFIED)
+
+        # Check output mentions dry run
+        self.assertIn("DRY RUN", out.getvalue())
+        self.assertIn("Would update 1 result(s)", out.getvalue())
+
+    def test_backfill_with_no_results_to_fix(self):
+        """Test backfill command when no results need fixing."""
+        from io import StringIO
+
+        from django.core.management import call_command
+
+        # Create result already in correct state
+        Result.objects.create(
+            student=self.student,
+            exam=self.exam,
+            import_batch=self.batch,
+            roll_number=self.student.roll_number,
+            name="Test Student",
+            block="E",
+            year=2025,
+            subject="Anatomy",
+            written_marks=Decimal("70.00"),
+            viva_marks=Decimal("20.00"),
+            total_marks=Decimal("90.00"),
+            grade="A",
+            exam_date=date(2025, 1, 15),
+            status=Result.ResultStatus.PUBLISHED,
+            published_at=timezone.now(),
+        )
+
+        # Run backfill command
+        out = StringIO()
+        call_command("backfill_result_status", stdout=out)
+
+        # Check output
+        self.assertIn("No results need status backfill", out.getvalue())
