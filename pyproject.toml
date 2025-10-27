@@ -81,3 +81,7 @@ exclude_lines = [
     "@(abc\\.)?abstractmethod",
     "except ValidationError as exc:.*# pragma: no cover",
 ]
+[tool.pytest.ini_options]
+DJANGO_SETTINGS_MODULE = "config.settings"
+python_files = ["tests.py", "test_*.py", "*_tests.py"]
+testpaths = ["server/apps"]

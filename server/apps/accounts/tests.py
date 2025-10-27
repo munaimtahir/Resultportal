@@ -1,17 +1,91 @@
 from __future__ import annotations
 
 import io
+from datetime import timedelta
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core.exceptions import PermissionDenied
 from django.test import TestCase
-
+from django.utils import timezone
 from social_core.exceptions import AuthForbidden
 
 from . import pipeline
 from .importers import StudentCSVImporter
-from .models import Student
+from .models import Student, YearClass, StudentAccessToken
+
+
+class YearClassModelTests(TestCase):
+    def test_ordering_by_order_field(self) -> None:
+        """Test that YearClass orders by the order field."""
+        year3 = YearClass.objects.create(label="3rd Year", order=3)
+        year1 = YearClass.objects.create(label="1st Year", order=1)
+        year2 = YearClass.objects.create(label="2nd Year", order=2)
+        
+        years = list(YearClass.objects.all())
+        self.assertEqual(years, [year1, year2, year3])
+    
+    def test_unique_label_and_order(self) -> None:
+        """Test that label and order must be unique."""
+        YearClass.objects.create(label="1st Year", order=1)
+        
+        with self.assertRaises(Exception):  # IntegrityError
+            YearClass.objects.create(label="1st Year", order=2)
+        
+        with self.assertRaises(Exception):  # IntegrityError
+            YearClass.objects.create(label="First Year", order=1)
+
+
+class StudentAccessTokenTests(TestCase):
+    def setUp(self) -> None:
+        self.student = Student.objects.create(
+            official_email="student@pmc.edu.pk",
+            roll_number="PMC-001",
+            display_name="Test Student",
+        )
+    
+    def test_token_generation(self) -> None:
+        """Test generating an access token."""
+        token = StudentAccessToken.generate_for_student(self.student)
+        
+        self.assertEqual(token.student, self.student)
+        self.assertIsNotNone(token.code)
+        self.assertTrue(len(token.code) > 20)
+        self.assertGreater(token.expires_at, timezone.now())
+        self.assertIsNone(token.used_at)
+    
+    def test_token_validity_check(self) -> None:
+        """Test token validity checking."""
+        token = StudentAccessToken.generate_for_student(self.student, validity_hours=24)
+        
+        self.assertTrue(token.is_valid())
+    
+    def test_expired_token(self) -> None:
+        """Test expired token is not valid."""
+        token = StudentAccessToken.generate_for_student(self.student, validity_hours=0)
+        token.expires_at = timezone.now() - timedelta(hours=1)
+        token.save()
+        
+        self.assertFalse(token.is_valid())
+    
+    def test_used_token(self) -> None:
+        """Test used token is not valid."""
+        token = StudentAccessToken.generate_for_student(self.student)
+        token.mark_used()
+        
+        self.assertFalse(token.is_valid())
+        self.assertIsNotNone(token.used_at)
+    
+    def test_mark_used_idempotent(self) -> None:
+        """Test that marking as used multiple times is safe."""
+        token = StudentAccessToken.generate_for_student(self.student)
+        token.mark_used()
+        used_at_1 = token.used_at
+        
+        token.mark_used()
+        used_at_2 = token.used_at
+        
+        self.assertEqual(used_at_1, used_at_2)
 
 
 class StudentModelTests(TestCase):
@@ -31,7 +105,35 @@ class StudentModelTests(TestCase):
         self.assertNotIn(inactive, Student.objects.active())
         self.assertTrue(active.is_active)
         self.assertFalse(inactive.is_active)
-
+    
+    def test_year_class_relationship(self) -> None:
+        """Test student can be assigned to a year class."""
+        year_class = YearClass.objects.create(label="2nd Year", order=2)
+        student = Student.objects.create(
+            official_email="student@pmc.edu.pk",
+            roll_number="PMC-001",
+            year_class=year_class,
+        )
+        
+        self.assertEqual(student.year_class, year_class)
+        self.assertIn(student, year_class.students.all())
+    
+    def test_unique_year_class_roll_number(self) -> None:
+        """Test that roll_number must be unique within a year_class."""
+        year_class = YearClass.objects.create(label="2nd Year", order=2)
+        Student.objects.create(
+            official_email="student1@pmc.edu.pk",
+            roll_number="PMC-001",
+            year_class=year_class,
+        )
+        
+        # Same roll in same year should fail
+        with self.assertRaises(Exception):  # IntegrityError
+            Student.objects.create(
+                official_email="student2@pmc.edu.pk",
+                roll_number="PMC-001",
+                year_class=year_class,
+            )
 
 class WorkspacePipelineTests(TestCase):
     def setUp(self) -> None:
