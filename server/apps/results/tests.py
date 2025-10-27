@@ -321,8 +321,14 @@ class ResultModelTests(TestCase):
 
     def test_publish_method_sets_timestamp(self):
         """Test that publish() sets published_at timestamp."""
+        user = get_user_model().objects.create_user(
+            username="admin",
+            email="admin@pmc.edu.pk",
+        )
         result = self._build_result()
         result.save()
+        result.submit()
+        result.verify(user)
         self.assertIsNone(result.published_at)
         self.assertFalse(result.is_published)
 
@@ -333,8 +339,14 @@ class ResultModelTests(TestCase):
 
     def test_publish_method_idempotent(self):
         """Test that calling publish() multiple times is safe."""
+        user = get_user_model().objects.create_user(
+            username="admin",
+            email="admin@pmc.edu.pk",
+        )
         result = self._build_result()
         result.save()
+        result.submit()
+        result.verify(user)
         result.publish()
         first_published_at = result.published_at
 
@@ -345,8 +357,15 @@ class ResultModelTests(TestCase):
 
     def test_unpublish_method_clears_timestamp(self):
         """Test that unpublish() clears published_at timestamp."""
-        result = self._build_result(published_at=timezone.now())
+        user = get_user_model().objects.create_user(
+            username="admin",
+            email="admin@pmc.edu.pk",
+        )
+        result = self._build_result()
         result.save()
+        result.submit()
+        result.verify(user)
+        result.publish()
         self.assertTrue(result.is_published)
 
         result.unpublish()
@@ -735,6 +754,7 @@ class StudentResultsViewTests(TestCase):
             total_marks=Decimal("90.00"),
             grade="A",
             exam_date=date(2025, 1, 15),
+            status=Result.ResultStatus.PUBLISHED,
             published_at=timezone.now(),
         )
 
@@ -752,6 +772,7 @@ class StudentResultsViewTests(TestCase):
             total_marks=Decimal("100.00"),
             grade="A+",
             exam_date=date(2025, 1, 16),
+            status=Result.ResultStatus.DRAFT,
             published_at=None,
         )
 
