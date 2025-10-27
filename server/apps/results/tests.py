@@ -730,7 +730,7 @@ class StudentProfileViewTests(TestCase):
         """Test that profile page requires authentication."""
         response = self.client.get("/me/")
         self.assertEqual(response.status_code, 302)
-        self.assertIn("/accounts/login/", response.url)
+        self.assertIn("/accounts/token/authenticate/", response.url)
 
     def test_profile_displays_student_info(self):
         """Test that profile page displays student information."""
@@ -774,7 +774,7 @@ class StudentResultsViewTests(TestCase):
         """Test that results page requires authentication."""
         response = self.client.get("/me/results/")
         self.assertEqual(response.status_code, 302)
-        self.assertIn("/accounts/login/", response.url)
+        self.assertIn("/accounts/token/authenticate/", response.url)
 
     def test_results_page_only_shows_published_results(self):
         """Test that only published results are shown."""
@@ -870,3 +870,168 @@ class StudentResultsViewTests(TestCase):
         self.client.force_login(user_no_profile)
         response = self.client.get("/me/results/")
         self.assertEqual(response.status_code, 302)
+
+
+class TokenBasedAccessTests(TestCase):
+    """Tests for token-based access to student views."""
+
+    def setUp(self):
+        self.year_class = YearClass.objects.create(label="1st Year", order=1)
+        self.student = Student.objects.create(
+            year_class=self.year_class,
+            official_email="student@pmc.edu.pk",
+            roll_number="PMC-123",
+            display_name="Test Student",
+        )
+        self.exam = Exam.objects.create(
+            year_class=self.year_class,
+            code="BLOCK-A-2025",
+            title="Block A Exam",
+            kind=Exam.ExamKind.BLOCK,
+            exam_date=date.today(),
+        )
+        self.batch = ImportBatch.objects.create(
+            import_type=ImportBatch.ImportType.RESULTS,
+            is_dry_run=False,
+        )
+
+    def test_token_based_access_to_profile(self):
+        """Test accessing profile with token-based authentication."""
+        # Simulate token authentication in session
+        session = self.client.session
+        session["token_authenticated"] = True
+        session["token_student_id"] = self.student.id
+        session.save()
+
+        response = self.client.get("/me/")
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, "results/student_profile.html")
+        self.assertEqual(response.context["student"], self.student)
+
+    def test_token_based_access_to_results(self):
+        """Test accessing results with token-based authentication."""
+        # Create published result
+        from django.utils import timezone
+
+        Result.objects.create(
+            student=self.student,
+            exam=self.exam,
+            import_batch=self.batch,
+            roll_number=self.student.roll_number,
+            name="Test Student",
+            block="A",
+            year=2025,
+            subject="Pathology",
+            written_marks=Decimal("70.00"),
+            viva_marks=Decimal("20.00"),
+            total_marks=Decimal("90.00"),
+            grade="A",
+            exam_date=date.today(),
+            published_at=timezone.now(),
+            status=Result.ResultStatus.PUBLISHED,
+        )
+
+        # Simulate token authentication in session
+        session = self.client.session
+        session["token_authenticated"] = True
+        session["token_student_id"] = self.student.id
+        session.save()
+
+        response = self.client.get("/me/results/")
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, "results/student_results.html")
+        self.assertEqual(len(response.context["results"]), 1)
+
+    def test_home_redirects_for_token_authenticated_user(self):
+        """Test that home page redirects token-authenticated users."""
+        # Simulate token authentication in session
+        session = self.client.session
+        session["token_authenticated"] = True
+        session["token_student_id"] = self.student.id
+        session.save()
+
+        response = self.client.get("/")
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("/me/", response.url)
+
+    def test_profile_with_recheck_link(self):
+        """Test profile displays recheck link when available."""
+        from datetime import timedelta
+
+        from django.utils import timezone
+
+        # Create exam with recheck deadline in future
+        exam_with_recheck = Exam.objects.create(
+            year_class=self.year_class,
+            code="BLOCK-B-2025",
+            title="Block B Exam",
+            kind=Exam.ExamKind.BLOCK,
+            exam_date=date.today(),
+            recheck_form_url="https://example.com/recheck",
+            recheck_deadline=timezone.now() + timedelta(days=7),
+        )
+
+        # Create published result for this exam
+        Result.objects.create(
+            student=self.student,
+            exam=exam_with_recheck,
+            import_batch=self.batch,
+            roll_number=self.student.roll_number,
+            name="Test Student",
+            block="B",
+            year=2025,
+            subject="Pathology",
+            written_marks=Decimal("70.00"),
+            viva_marks=Decimal("20.00"),
+            total_marks=Decimal("90.00"),
+            grade="A",
+            exam_date=date.today(),
+            published_at=timezone.now(),
+            status=Result.ResultStatus.PUBLISHED,
+        )
+
+        # Simulate token authentication
+        session = self.client.session
+        session["token_authenticated"] = True
+        session["token_student_id"] = self.student.id
+        session.save()
+
+        response = self.client.get("/me/")
+        self.assertEqual(response.status_code, 200)
+        # Check that exam with recheck is in context
+        exams_with_results = response.context["exams_with_results"]
+        self.assertEqual(len(exams_with_results), 1)
+        self.assertTrue(exams_with_results[0]["recheck_open"])
+
+
+class TokenAccessEdgeCases(TestCase):
+    """Test edge cases for token-based access."""
+
+    def setUp(self):
+        self.year_class = YearClass.objects.create(label="1st Year", order=1)
+
+    def test_profile_with_invalid_token_student_id(self):
+        """Test profile access with invalid student ID in session."""
+        # Simulate token authentication with non-existent student ID
+        session = self.client.session
+        session["token_authenticated"] = True
+        session["token_student_id"] = 99999  # Non-existent ID
+        session.save()
+
+        response = self.client.get("/me/")
+        # Should still render but without student data
+        self.assertEqual(response.status_code, 200)
+        self.assertNotIn("published_results_count", response.context)
+
+    def test_results_with_invalid_token_student_id(self):
+        """Test results access with invalid student ID in session."""
+        # Simulate token authentication with non-existent student ID
+        session = self.client.session
+        session["token_authenticated"] = True
+        session["token_student_id"] = 99999  # Non-existent ID
+        session.save()
+
+        response = self.client.get("/me/results/")
+        self.assertEqual(response.status_code, 200)
+        # Should return empty queryset
+        self.assertEqual(len(response.context["results"]), 0)
