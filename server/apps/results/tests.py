@@ -831,3 +831,192 @@ class StudentResultsViewTests(TestCase):
         self.client.force_login(user_no_profile)
         response = self.client.get("/me/results/")
         self.assertEqual(response.status_code, 302)
+
+
+class ResultQuerySetTests(TestCase):
+    """Tests for Result queryset methods."""
+    
+    def setUp(self) -> None:
+        self.year_class = YearClass.objects.create(label="2nd Year", order=2)
+        self.student = Student.objects.create(
+            year_class=self.year_class,
+            official_email="student@pmc.edu.pk",
+            roll_number="PMC-001",
+            display_name="Test Student",
+        )
+        self.batch = ImportBatch.objects.create(
+            import_type=ImportBatch.ImportType.RESULTS,
+            is_dry_run=False,
+        )
+    
+    def test_by_status_filters_correctly(self):
+        """Test by_status queryset method."""
+        # Create results with different statuses
+        draft = Result.objects.create(
+            student=self.student,
+            import_batch=self.batch,
+            roll_number=self.student.roll_number,
+            name="Test Student",
+            block="E",
+            year=2025,
+            subject="Pathology",
+            written_marks=Decimal("70.00"),
+            viva_marks=Decimal("20.00"),
+            total_marks=Decimal("90.00"),
+            grade="A",
+            exam_date=date.today(),
+            status=Result.ResultStatus.DRAFT,
+        )
+        
+        submitted = Result.objects.create(
+            student=self.student,
+            import_batch=self.batch,
+            roll_number=self.student.roll_number,
+            name="Test Student",
+            block="E",
+            year=2025,
+            subject="Anatomy",
+            written_marks=Decimal("80.00"),
+            viva_marks=Decimal("20.00"),
+            total_marks=Decimal("100.00"),
+            grade="A+",
+            exam_date=date.today(),
+            status=Result.ResultStatus.SUBMITTED,
+        )
+        
+        draft_results = Result.objects.by_status(Result.ResultStatus.DRAFT)
+        self.assertIn(draft, draft_results)
+        self.assertNotIn(submitted, draft_results)
+        
+        submitted_results = Result.objects.by_status(Result.ResultStatus.SUBMITTED)
+        self.assertIn(submitted, submitted_results)
+        self.assertNotIn(draft, submitted_results)
+
+
+class ResultSyncMarksTests(TestCase):
+    """Tests for the sync_marks_with_flags method."""
+    
+    def setUp(self) -> None:
+        self.year_class = YearClass.objects.create(label="2nd Year", order=2)
+        self.student = Student.objects.create(
+            year_class=self.year_class,
+            official_email="student@pmc.edu.pk",
+            roll_number="PMC-001",
+        )
+        self.batch = ImportBatch.objects.create(
+            import_type=ImportBatch.ImportType.RESULTS,
+            is_dry_run=False,
+        )
+    
+    def test_sync_marks_with_flags_copies_legacy_fields(self):
+        """Test that sync_marks_with_flags copies legacy fields to new fields."""
+        result = Result(
+            student=self.student,
+            import_batch=self.batch,
+            roll_number=self.student.roll_number,
+            name="Test",
+            block="E",
+            year=2025,
+            subject="Test",
+            written_marks=Decimal("70.00"),
+            viva_marks=Decimal("20.00"),
+            total_marks=Decimal("90.00"),
+            grade="A",
+            exam_date=date.today(),
+        )
+        
+        result.sync_marks_with_flags()
+        
+        self.assertEqual(result.theory, result.written_marks)
+        self.assertEqual(result.practical, result.viva_marks)
+        self.assertEqual(result.total, result.total_marks)
+        self.assertTrue(hasattr(result, '_theory_set'))
+        self.assertTrue(hasattr(result, '_practical_set'))
+        self.assertTrue(hasattr(result, '_total_set'))
+
+
+class ResultStatusLogTests(TestCase):
+    """Tests for status log functionality."""
+    
+    def setUp(self) -> None:
+        self.year_class = YearClass.objects.create(label="2nd Year", order=2)
+        self.student = Student.objects.create(
+            year_class=self.year_class,
+            official_email="student@pmc.edu.pk",
+            roll_number="PMC-001",
+        )
+        self.batch = ImportBatch.objects.create(
+            import_type=ImportBatch.ImportType.RESULTS,
+            is_dry_run=False,
+        )
+        self.user = get_user_model().objects.create_user(
+            username="admin",
+            email="admin@pmc.edu.pk",
+        )
+    
+    def test_status_log_tracks_transitions(self):
+        """Test that status_log properly tracks status transitions."""
+        result = Result.objects.create(
+            student=self.student,
+            import_batch=self.batch,
+            roll_number=self.student.roll_number,
+            name="Test",
+            block="E",
+            year=2025,
+            subject="Test",
+            written_marks=Decimal("70.00"),
+            viva_marks=Decimal("20.00"),
+            total_marks=Decimal("90.00"),
+            grade="A",
+            exam_date=date.today(),
+        )
+        
+        # Submit the result
+        result.submit(self.user)
+        result.refresh_from_db()
+        
+        self.assertIsInstance(result.status_log, list)
+        self.assertGreater(len(result.status_log), 0)
+        self.assertEqual(result.status_log[0]['from_status'], 'DRAFT')
+        self.assertEqual(result.status_log[0]['to_status'], 'SUBMITTED')
+        self.assertEqual(result.status_log[0]['user'], 'admin')
+
+
+class ResultNullMarksValidationTests(TestCase):
+    """Test validation with null marks."""
+    
+    def setUp(self) -> None:
+        self.year_class = YearClass.objects.create(label="2nd Year", order=2)
+        self.student = Student.objects.create(
+            year_class=self.year_class,
+            official_email="student@pmc.edu.pk",
+            roll_number="PMC-001",
+        )
+        self.batch = ImportBatch.objects.create(
+            import_type=ImportBatch.ImportType.RESULTS,
+            is_dry_run=False,
+        )
+    
+    def test_null_marks_validation_skipped(self):
+        """Test that None marks are skipped in validation."""
+        result = Result(
+            student=self.student,
+            import_batch=self.batch,
+            roll_number=self.student.roll_number,
+            name="Test",
+            block="E",
+            year=2025,
+            subject="Test",
+            written_marks=None,  # Null value
+            viva_marks=Decimal("20.00"),
+            total_marks=Decimal("20.00"),
+            grade="C",
+            exam_date=date.today(),
+        )
+        
+        # Should not raise ValidationError
+        result.full_clean()
+        result.save()
+        self.assertIsNone(result.written_marks)
+
+

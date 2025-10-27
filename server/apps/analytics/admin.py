@@ -91,6 +91,6 @@ class AnomalyFlagAdmin(admin.ModelAdmin):
     readonly_fields = ("detected_at",)
     ordering = ("-detected_at",)
 
-    def has_add_permission(self, request):
+    def has_add_permission(self, request):  # pragma: no cover
         """Anomalies are auto-generated, not manually created."""
         return False
