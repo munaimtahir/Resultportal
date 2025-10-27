@@ -174,9 +174,9 @@ def flatten_validation_errors(error: ValidationError) -> list[str]:
         # Try to access message_dict for field-specific errors
         message_dict = error.message_dict
         if isinstance(message_dict, dict):
-            for field, field_errors in message_dict.items():
+            for field_name, field_errors in message_dict.items():
                 for field_error in field_errors:
-                    messages.append(f"{field}: {field_error}")
+                    messages.append(f"{field_name}: {field_error}")
         else:  # pragma: no cover - unreachable in Django's ValidationError
             messages.extend(error.messages)
     except AttributeError:

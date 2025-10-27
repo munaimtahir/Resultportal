@@ -14,7 +14,7 @@ from .models import (
 @admin.register(ExamAggregate)
 class ExamAggregateAdmin(admin.ModelAdmin):
     """Configuration for managing exam aggregates in the Django admin."""
-    
+
     list_display = (
         "exam",
         "total_students",
@@ -31,7 +31,7 @@ class ExamAggregateAdmin(admin.ModelAdmin):
 @admin.register(ComponentAggregate)
 class ComponentAggregateAdmin(admin.ModelAdmin):
     """Configuration for managing component aggregates in the Django admin."""
-    
+
     list_display = (
         "exam",
         "component",
@@ -49,7 +49,7 @@ class ComponentAggregateAdmin(admin.ModelAdmin):
 @admin.register(ComparisonAggregate)
 class ComparisonAggregateAdmin(admin.ModelAdmin):
     """Configuration for managing comparison aggregates in the Django admin."""
-    
+
     list_display = (
         "current_exam",
         "previous_exam",
@@ -67,7 +67,7 @@ class ComparisonAggregateAdmin(admin.ModelAdmin):
 @admin.register(TrendAggregate)
 class TrendAggregateAdmin(admin.ModelAdmin):
     """Configuration for managing trend aggregates in the Django admin."""
-    
+
     list_display = ("year_class", "period_label", "computed_at")
     list_filter = ("year_class", "computed_at")
     search_fields = ("period_label",)
@@ -78,7 +78,7 @@ class TrendAggregateAdmin(admin.ModelAdmin):
 @admin.register(AnomalyFlag)
 class AnomalyFlagAdmin(admin.ModelAdmin):
     """Configuration for managing anomaly flags in the Django admin."""
-    
+
     list_display = (
         "exam",
         "severity",
@@ -90,7 +90,7 @@ class AnomalyFlagAdmin(admin.ModelAdmin):
     search_fields = ("exam__code", "flag_type", "message")
     readonly_fields = ("detected_at",)
     ordering = ("-detected_at",)
-    
+
     def has_add_permission(self, request):
         """Anomalies are auto-generated, not manually created."""
         return False

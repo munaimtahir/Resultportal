@@ -21,17 +21,17 @@ class YearClassModelTests(TestCase):
         year3 = YearClass.objects.create(label="3rd Year", order=3)
         year1 = YearClass.objects.create(label="1st Year", order=1)
         year2 = YearClass.objects.create(label="2nd Year", order=2)
-        
+
         years = list(YearClass.objects.all())
         self.assertEqual(years, [year1, year2, year3])
-    
+
     def test_unique_label_and_order(self) -> None:
         """Test that label and order must be unique."""
         YearClass.objects.create(label="1st Year", order=1)
-        
+
         with self.assertRaises(Exception):  # IntegrityError
             YearClass.objects.create(label="1st Year", order=2)
-        
+
         with self.assertRaises(Exception):  # IntegrityError
             YearClass.objects.create(label="First Year", order=1)
 
@@ -39,7 +39,7 @@ class YearClassModelTests(TestCase):
 class ExamModelTests(TestCase):
     def setUp(self) -> None:
         self.year_class = YearClass.objects.create(label="2nd Year", order=2)
-    
+
     def test_exam_creation(self) -> None:
         """Test basic exam creation."""
         exam = Exam.objects.create(
@@ -50,10 +50,10 @@ class ExamModelTests(TestCase):
             block_letter="E",
             exam_date=date(2024, 6, 15),
         )
-        
+
         self.assertEqual(str(exam), "BLOCK-E-2024 - Block E Examination 2024")
         self.assertEqual(exam.kind, Exam.ExamKind.BLOCK)
-    
+
     def test_recheck_window_open(self) -> None:
         """Test recheck window status checking."""
         exam = Exam.objects.create(
@@ -62,11 +62,11 @@ class ExamModelTests(TestCase):
             title="Test Exam",
             kind=Exam.ExamKind.TEST,
             exam_date=date.today(),
-            recheck_deadline=timezone.now() + timedelta(days=7)
+            recheck_deadline=timezone.now() + timedelta(days=7),
         )
-        
+
         self.assertTrue(exam.is_recheck_open())
-    
+
     def test_recheck_window_closed(self) -> None:
         """Test recheck window closed."""
         exam = Exam.objects.create(
@@ -75,11 +75,11 @@ class ExamModelTests(TestCase):
             title="Test Exam 2",
             kind=Exam.ExamKind.TEST,
             exam_date=date.today(),
-            recheck_deadline=timezone.now() - timedelta(days=1)
+            recheck_deadline=timezone.now() - timedelta(days=1),
         )
-        
+
         self.assertFalse(exam.is_recheck_open())
-    
+
     def test_no_recheck_deadline(self) -> None:
         """Test when no recheck deadline is set."""
         exam = Exam.objects.create(
@@ -89,7 +89,7 @@ class ExamModelTests(TestCase):
             kind=Exam.ExamKind.TEST,
             exam_date=date.today(),
         )
-        
+
         self.assertFalse(exam.is_recheck_open())
 
 
@@ -100,49 +100,48 @@ class StudentAccessTokenTests(TestCase):
             roll_number="PMC-001",
             display_name="Test Student",
         )
-    
+
     def test_token_generation(self) -> None:
         """Test generating an access token."""
         token = StudentAccessToken.generate_for_student(self.student)
-        
+
         self.assertEqual(token.student, self.student)
         self.assertIsNotNone(token.code)
         self.assertTrue(len(token.code) > 20)
         self.assertGreater(token.expires_at, timezone.now())
         self.assertIsNone(token.used_at)
-    
+
     def test_token_validity_check(self) -> None:
         """Test token validity checking."""
         token = StudentAccessToken.generate_for_student(self.student, validity_hours=24)
-        
+
         self.assertTrue(token.is_valid())
-    
+
     def test_expired_token(self) -> None:
         """Test expired token is not valid."""
         token = StudentAccessToken.generate_for_student(self.student, validity_hours=0)
         token.expires_at = timezone.now() - timedelta(hours=1)
         token.save()
-        
+
         self.assertFalse(token.is_valid())
-    
+
     def test_used_token(self) -> None:
         """Test used token is not valid."""
         token = StudentAccessToken.generate_for_student(self.student)
         token.mark_used()
-        
+
         self.assertFalse(token.is_valid())
         self.assertIsNotNone(token.used_at)
-    
+
     def test_mark_used_idempotent(self) -> None:
         """Test that marking as used multiple times is safe."""
         token = StudentAccessToken.generate_for_student(self.student)
-        first_used = timezone.now()
         token.mark_used()
         used_at_1 = token.used_at
-        
+
         token.mark_used()
         used_at_2 = token.used_at
-        
+
         self.assertEqual(used_at_1, used_at_2)
 
 
@@ -224,20 +223,20 @@ class ResultModelTests(TestCase):
         result = self._build_result(roll_number="OTHER-ROLL")
         with self.assertRaises(ValidationError):
             result.full_clean()
-    
+
     def test_result_status_workflow_submit(self) -> None:
         """Test submitting a draft result."""
         result = self._build_result()
         result.save()
-        
+
         self.assertEqual(result.status, Result.ResultStatus.DRAFT)
-        
+
         result.submit()
         result.refresh_from_db()
-        
+
         self.assertEqual(result.status, Result.ResultStatus.SUBMITTED)
         self.assertTrue(len(result.status_log) > 0)
-    
+
     def test_result_status_workflow_verify(self) -> None:
         """Test verifying a submitted result."""
         user = get_user_model().objects.create_user(
@@ -247,25 +246,25 @@ class ResultModelTests(TestCase):
         result = self._build_result()
         result.save()
         result.submit()
-        
+
         result.verify(user)
         result.refresh_from_db()
-        
+
         self.assertEqual(result.status, Result.ResultStatus.VERIFIED)
         self.assertEqual(result.verified_by, user)
         self.assertIsNotNone(result.verified_at)
-    
+
     def test_result_status_workflow_return(self) -> None:
         """Test returning a submitted result."""
         result = self._build_result()
         result.save()
         result.submit()
-        
+
         result.return_for_correction()
         result.refresh_from_db()
-        
+
         self.assertEqual(result.status, Result.ResultStatus.RETURNED)
-    
+
     def test_result_status_workflow_publish(self) -> None:
         """Test publishing a verified result."""
         user = get_user_model().objects.create_user(
@@ -276,14 +275,14 @@ class ResultModelTests(TestCase):
         result.save()
         result.submit()
         result.verify(user)
-        
+
         result.publish(user)
         result.refresh_from_db()
-        
+
         self.assertEqual(result.status, Result.ResultStatus.PUBLISHED)
         self.assertIsNotNone(result.published_at)
         self.assertTrue(result.is_published)
-    
+
     def test_result_status_workflow_unpublish(self) -> None:
         """Test unpublishing a published result."""
         user = get_user_model().objects.create_user(
@@ -295,28 +294,27 @@ class ResultModelTests(TestCase):
         result.submit()
         result.verify(user)
         result.publish(user)
-        
+
         result.unpublish(user)
         result.refresh_from_db()
-        
+
         self.assertEqual(result.status, Result.ResultStatus.VERIFIED)
         self.assertIsNone(result.published_at)
         self.assertFalse(result.is_published)
-    
+
     def test_published_queryset_filters(self) -> None:
         """Test the published queryset filter."""
         published = self._build_result(subject="Anatomy")
         published.save()
         published.status = Result.ResultStatus.PUBLISHED
         published.save(update_fields=["status"])
-        
+
         draft = self._build_result(subject="Biochem")
         draft.save()
-        
+
         published_results = Result.objects.published()
         self.assertIn(published, published_results)
         self.assertNotIn(draft, published_results)
-
 
         self.assertIn(published, Result.objects.published())
         self.assertNotIn(draft, Result.objects.published())
@@ -408,12 +406,30 @@ class ResultCSVImporterTests(TestCase):
             exam_date=date(next_year, 1, 15),
         )
 
-        self.csv_payload = (
-            "respondent_id,roll_no,name,block,year,subject,written_marks,viva_marks,total_marks,grade,exam_date\n"
-            f"resp-1,PMC-001,Test Student,E,{next_year},Pathology,70,20,90,A,{next_year}-01-15\n"
-            f",PMC-001,Test Student,E,{next_year},Anatomy,80,20,100,A+,{next_year}-01-16\n"
-            f",PMC-001,Test Student,E,{next_year},Physiology,50,20,60,A,{next_year}-01-17\n"
-            f",PMC-999,Missing Student,E,{next_year},Pathology,60,20,80,B,{next_year}-01-18"
+        header = ",".join(
+            [
+                "respondent_id",
+                "roll_no",
+                "name",
+                "block",
+                "year",
+                "subject",
+                "written_marks",
+                "viva_marks",
+                "total_marks",
+                "grade",
+                "exam_date",
+            ]
+        )
+        self.csv_header = header
+        self.csv_payload = "\n".join(
+            [
+                header,
+                f"resp-1,PMC-001,Test Student,E,{next_year},Pathology,70,20,90,A,{next_year}-01-15",
+                f",PMC-001,Test Student,E,{next_year},Anatomy,80,20,100,A+,{next_year}-01-16",
+                f",PMC-001,Test Student,E,{next_year},Physiology,50,20,60,A,{next_year}-01-17",
+                f",PMC-999,Missing Student,E,{next_year},Pathology,60,20,80,B,{next_year}-01-18",
+            ]
         )
 
     def _build_stream(self) -> io.StringIO:
@@ -496,8 +512,13 @@ class ResultCSVImporterTests(TestCase):
         """Test that missing required fields are caught."""
         next_year = datetime.now().year + 1
         csv_missing = io.StringIO(
-            "respondent_id,roll_no,name,block,year,subject,written_marks,viva_marks,total_marks,grade,exam_date\n"
-            f",PMC-001,,E,{next_year},Pathology,70,20,90,A,{next_year}-01-15\n"  # Missing name
+            "\n".join(
+                [
+                    self.csv_header,
+                    # Missing name value
+                    f",PMC-001,,E,{next_year},Pathology,70,20,90,A,{next_year}-01-15",
+                ]
+            )
         )
         importer = ResultCSVImporter(csv_missing, started_by=self.staff_user)
         summary = importer.preview()
@@ -509,8 +530,12 @@ class ResultCSVImporterTests(TestCase):
         """Test that invalid year format is caught."""
         next_year = datetime.now().year + 1
         csv_invalid = io.StringIO(
-            "respondent_id,roll_no,name,block,year,subject,written_marks,viva_marks,total_marks,grade,exam_date\n"
-            f",PMC-001,Test,E,invalid,Pathology,70,20,90,A,{next_year}-01-15\n"
+            "\n".join(
+                [
+                    self.csv_header,
+                    f",PMC-001,Test,E,invalid,Pathology,70,20,90,A,{next_year}-01-15",
+                ]
+            )
         )
         importer = ResultCSVImporter(csv_invalid, started_by=self.staff_user)
         summary = importer.preview()
@@ -524,8 +549,12 @@ class ResultCSVImporterTests(TestCase):
         """Test that invalid date format is caught."""
         next_year = datetime.now().year + 1
         csv_invalid = io.StringIO(
-            "respondent_id,roll_no,name,block,year,subject,written_marks,viva_marks,total_marks,grade,exam_date\n"
-            f",PMC-001,Test,E,{next_year},Pathology,70,20,90,A,invalid-date\n"
+            "\n".join(
+                [
+                    self.csv_header,
+                    f",PMC-001,Test,E,{next_year},Pathology,70,20,90,A,invalid-date",
+                ]
+            )
         )
         importer = ResultCSVImporter(csv_invalid, started_by=self.staff_user)
         summary = importer.preview()
@@ -537,8 +566,12 @@ class ResultCSVImporterTests(TestCase):
         """Test that invalid marks format is caught."""
         next_year = datetime.now().year + 1
         csv_invalid = io.StringIO(
-            "respondent_id,roll_no,name,block,year,subject,written_marks,viva_marks,total_marks,grade,exam_date\n"
-            f",PMC-001,Test,E,{next_year},Pathology,invalid,20,90,A,{next_year}-01-15\n"
+            "\n".join(
+                [
+                    self.csv_header,
+                    f",PMC-001,Test,E,{next_year},Pathology,invalid,20,90,A,{next_year}-01-15",
+                ]
+            )
         )
         importer = ResultCSVImporter(csv_invalid, started_by=self.staff_user)
         summary = importer.preview()
@@ -551,9 +584,14 @@ class ResultCSVImporterTests(TestCase):
         next_year = datetime.now().year + 1
         # Use the existing student from setUp
         csv_dupes = io.StringIO(
-            "respondent_id,roll_no,name,block,year,subject,written_marks,viva_marks,total_marks,grade,exam_date\n"
-            f",PMC-001,Test,E,{next_year},Chemistry,70,20,90,A,{next_year}-01-20\n"
-            f",PMC-001,Test,E,{next_year},Chemistry,80,20,100,A+,{next_year}-01-20\n"
+            "\n".join(
+                [
+                    self.csv_header,
+                    f",PMC-001,Test,E,{next_year},Chemistry,70,20,90,A,{next_year}-01-20",
+                    f",PMC-001,Test,E,{next_year},Chemistry,80,20,100,A+,{next_year}-01-20",
+                    "",
+                ]
+            )
         )
         importer = ResultCSVImporter(csv_dupes, started_by=self.staff_user)
         summary = importer.preview()
@@ -567,8 +605,16 @@ class ResultCSVImporterTests(TestCase):
         next_year = datetime.now().year + 1
         # Import exact same data as existing result
         csv_same = io.StringIO(
-            "respondent_id,roll_no,name,block,year,subject,written_marks,viva_marks,total_marks,grade,exam_date\n"
-            f"resp-1,PMC-001,Test Student,E,{next_year},Pathology,65,20,85,B,{next_year}-01-15\n"
+            "\n".join(
+                [
+                    self.csv_header,
+                    (
+                        "resp-1,PMC-001,Test Student,E,"
+                        f"{next_year},Pathology,65,20,85,B,{next_year}-01-15"
+                    ),
+                    "",
+                ]
+            )
         )
         importer = ResultCSVImporter(csv_same, started_by=self.staff_user)
         summary = importer.preview()
@@ -594,7 +640,7 @@ class HomeViewTests(TestCase):
             username="student1",
             email="student1@pmc.edu.pk",
         )
-        student = Student.objects.create(
+        Student.objects.create(
             official_email="student1@pmc.edu.pk",
             roll_number="PMC-100",
             display_name="Test Student",

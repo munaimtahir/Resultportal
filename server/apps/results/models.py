@@ -1,6 +1,4 @@
 from __future__ import annotations
-
-import json
 from decimal import Decimal
 
 from django.conf import settings
@@ -14,64 +12,50 @@ from apps.accounts.models import Student, YearClass
 
 class Exam(models.Model):
     """Exam/Assessment definition."""
-    
+
     class ExamKind(models.TextChoices):
         BLOCK = "BLOCK", "Block Exam"
         SEND_UP = "SEND_UP", "Send-up Exam"
         UNIVERSITY = "UNIVERSITY", "University Exam"
         TEST = "TEST", "Test"
-    
+
     year_class = models.ForeignKey(
         YearClass,
         on_delete=models.PROTECT,
         related_name="exams",
-        help_text="Year/class this exam is for"
+        help_text="Year/class this exam is for",
     )
     code = models.CharField(
-        max_length=50,
-        unique=True,
-        help_text="Unique exam code (e.g., 'BLOCK-E-2024')"
+        max_length=50, unique=True, help_text="Unique exam code (e.g., 'BLOCK-E-2024')"
     )
-    title = models.CharField(
-        max_length=200,
-        help_text="Full exam title"
-    )
+    title = models.CharField(max_length=200, help_text="Full exam title")
     kind = models.CharField(
         max_length=20,
         choices=ExamKind.choices,
         default=ExamKind.BLOCK,
-        help_text="Type of examination"
+        help_text="Type of examination",
     )
     block_letter = models.CharField(
-        max_length=5,
-        blank=True,
-        help_text="Block letter (A, B, C, etc.) if applicable"
+        max_length=5, blank=True, help_text="Block letter (A, B, C, etc.) if applicable"
     )
-    exam_date = models.DateField(
-        help_text="Primary exam date"
-    )
-    recheck_form_url = models.URLField(
-        blank=True,
-        help_text="URL to recheck application form"
-    )
+    exam_date = models.DateField(help_text="Primary exam date")
+    recheck_form_url = models.URLField(blank=True, help_text="URL to recheck application form")
     recheck_deadline = models.DateTimeField(
-        null=True,
-        blank=True,
-        help_text="Deadline for recheck requests"
+        null=True, blank=True, help_text="Deadline for recheck requests"
     )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-    
+
     class Meta:
         ordering = ("-exam_date", "code")
         indexes = [
             models.Index(fields=["code"], name="exam_code_idx"),
             models.Index(fields=["year_class", "exam_date"], name="exam_year_date_idx"),
         ]
-    
+
     def __str__(self) -> str:
         return f"{self.code} - {self.title}"
-    
+
     def is_recheck_open(self) -> bool:
         """Check if recheck window is currently open."""
         if not self.recheck_deadline:
@@ -93,7 +77,7 @@ class ImportBatch(models.Model):
         null=True,
         blank=True,
         related_name="import_batches",
-        help_text="Exam this batch is associated with (for result imports)"
+        help_text="Exam this batch is associated with (for result imports)",
     )
     started_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -138,14 +122,10 @@ class ImportBatch(models.Model):
         help_text="Rows skipped due to validation errors.",
     )
     errors_json = models.JSONField(
-        default=list,
-        blank=True,
-        help_text="List of error messages from validation"
+        default=list, blank=True, help_text="List of error messages from validation"
     )
     warnings_json = models.JSONField(
-        default=list,
-        blank=True,
-        help_text="List of warning messages from validation"
+        default=list, blank=True, help_text="List of warning messages from validation"
     )
     created_at = models.DateTimeField(auto_now_add=True)
     completed_at = models.DateTimeField(
@@ -172,14 +152,14 @@ class ImportBatch(models.Model):
 class ResultQuerySet(models.QuerySet):
     def published(self) -> "ResultQuerySet":
         return self.filter(status=Result.ResultStatus.PUBLISHED)
-    
+
     def by_status(self, status: str) -> "ResultQuerySet":
         return self.filter(status=status)
 
 
 class Result(models.Model):
     """Stores a single subject result for a student."""
-    
+
     class ResultStatus(models.TextChoices):
         DRAFT = "DRAFT", "Draft"
         SUBMITTED = "SUBMITTED", "Submitted"
@@ -198,7 +178,7 @@ class Result(models.Model):
         null=True,
         blank=True,
         related_name="results",
-        help_text="Exam this result belongs to"
+        help_text="Exam this result belongs to",
     )
     import_batch = models.ForeignKey(
         ImportBatch,
@@ -210,55 +190,52 @@ class Result(models.Model):
     roll_number = models.CharField(
         max_length=32,
         db_index=True,
-        help_text="Roll number as it appears in the import data, should match the student's roll number.",
+        help_text=(
+            "Roll number as it appears in the import data, "
+            "should match the student's roll number."
+        ),
     )
     name = models.CharField(max_length=255)
     block = models.CharField(max_length=32)
     year = models.PositiveIntegerField()
     subject = models.CharField(max_length=128)
-    
+
     # Marks fields - now mapped to theory/practical/total
     theory = models.DecimalField(
-        max_digits=6, 
+        max_digits=6,
         decimal_places=2,
         null=True,
         blank=True,
-        help_text="Theory/written component marks"
+        help_text="Theory/written component marks",
     )
     practical = models.DecimalField(
-        max_digits=6, 
+        max_digits=6,
         decimal_places=2,
         null=True,
         blank=True,
-        help_text="Practical/viva component marks"
+        help_text="Practical/viva component marks",
     )
     total = models.DecimalField(
-        max_digits=6, 
-        decimal_places=2,
-        null=True,
-        blank=True,
-        help_text="Total marks"
+        max_digits=6, decimal_places=2, null=True, blank=True, help_text="Total marks"
     )
-    
+
     # Keep old field names for backward compatibility
     written_marks = models.DecimalField(max_digits=6, decimal_places=2, null=True, blank=True)
     viva_marks = models.DecimalField(max_digits=6, decimal_places=2, null=True, blank=True)
     total_marks = models.DecimalField(max_digits=6, decimal_places=2, null=True, blank=True)
-    
+
     grade = models.CharField(max_length=32)
     exam_date = models.DateField()
-    
+
     # Workflow status fields
     status = models.CharField(
         max_length=20,
         choices=ResultStatus.choices,
         default=ResultStatus.DRAFT,
-        help_text="Current workflow status"
+        help_text="Current workflow status",
     )
     status_log = models.JSONField(
-        default=list,
-        blank=True,
-        help_text="Audit trail of status changes"
+        default=list, blank=True, help_text="Audit trail of status changes"
     )
     verified_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -266,13 +243,9 @@ class Result(models.Model):
         null=True,
         blank=True,
         related_name="verified_results",
-        help_text="Admin who verified this result"
+        help_text="Admin who verified this result",
     )
-    verified_at = models.DateTimeField(
-        null=True,
-        blank=True,
-        help_text="When result was verified"
-    )
+    verified_at = models.DateTimeField(null=True, blank=True, help_text="When result was verified")
     published_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -297,13 +270,13 @@ class Result(models.Model):
 
     def clean(self) -> None:
         errors: dict[str, list[str]] = {}
-        
+
         # Sync old fields to new if they're set and new fields aren't
-        if self.written_marks is not None and not hasattr(self, '_theory_set'):
+        if self.written_marks is not None and not hasattr(self, "_theory_set"):
             self.theory = self.written_marks
-        if self.viva_marks is not None and not hasattr(self, '_practical_set'):
+        if self.viva_marks is not None and not hasattr(self, "_practical_set"):
             self.practical = self.viva_marks
-        if self.total_marks is not None and not hasattr(self, '_total_set'):
+        if self.total_marks is not None and not hasattr(self, "_total_set"):
             self.total = self.total_marks
 
         # Validate marks are non-negative
@@ -320,11 +293,17 @@ class Result(models.Model):
                 errors.setdefault("total", []).append(
                     "Total marks must equal theory plus practical marks.",
                 )
-        
+
         # Backward compatibility check (only if new fields not set)
-        if (self.theory is None and self.written_marks is not None and 
-            self.viva_marks is not None and self.total_marks is not None):
-            expected = (Decimal(self.written_marks) + Decimal(self.viva_marks)).quantize(Decimal("0.01"))
+        if (
+            self.theory is None
+            and self.written_marks is not None
+            and self.viva_marks is not None
+            and self.total_marks is not None
+        ):
+            expected = (Decimal(self.written_marks) + Decimal(self.viva_marks)).quantize(
+                Decimal("0.01")
+            )
             total = Decimal(self.total_marks).quantize(Decimal("0.01"))
             if expected != total:
                 errors.setdefault("total_marks", []).append(
@@ -342,25 +321,26 @@ class Result(models.Model):
 
     def save(self, *args, **kwargs):
         # Sync fields bidirectionally
-        # Priority: use written_marks/viva_marks/total_marks if theory/practical/total not explicitly set
+        # Priority: use written_marks/viva_marks/total_marks
+        # if theory/practical/total not explicitly set
         if self.theory is not None:
             self.written_marks = self.theory
         elif self.written_marks is not None:
             self.theory = self.written_marks
-            
+
         if self.practical is not None:
             self.viva_marks = self.practical
         elif self.viva_marks is not None:
             self.practical = self.viva_marks
-            
+
         if self.total is not None:
             self.total_marks = self.total
         elif self.total_marks is not None:
             self.total = self.total_marks
-            
+
         self.full_clean()
         return super().save(*args, **kwargs)
-    
+
     def _log_status_change(self, old_status: str, new_status: str, user=None) -> None:
         """Add status change to audit log."""
         log_entry = {
@@ -372,7 +352,7 @@ class Result(models.Model):
         if not isinstance(self.status_log, list):
             self.status_log = []
         self.status_log.append(log_entry)
-    
+
     def submit(self, user=None) -> None:
         """Transition from DRAFT to SUBMITTED."""
         if self.status == self.ResultStatus.DRAFT:
@@ -380,7 +360,7 @@ class Result(models.Model):
             self.status = self.ResultStatus.SUBMITTED
             self._log_status_change(old_status, self.status, user)
             self.save(update_fields=["status", "status_log", "updated_at"])
-    
+
     def return_for_correction(self, user=None) -> None:
         """Transition from SUBMITTED to RETURNED."""
         if self.status == self.ResultStatus.SUBMITTED:
@@ -388,7 +368,7 @@ class Result(models.Model):
             self.status = self.ResultStatus.RETURNED
             self._log_status_change(old_status, self.status, user)
             self.save(update_fields=["status", "status_log", "updated_at"])
-    
+
     def verify(self, user) -> None:
         """Transition from SUBMITTED to VERIFIED."""
         if self.status == self.ResultStatus.SUBMITTED:
@@ -397,7 +377,9 @@ class Result(models.Model):
             self.verified_by = user
             self.verified_at = timezone.now()
             self._log_status_change(old_status, self.status, user)
-            self.save(update_fields=["status", "verified_by", "verified_at", "status_log", "updated_at"])
+            self.save(
+                update_fields=["status", "verified_by", "verified_at", "status_log", "updated_at"]
+            )
 
     def publish(self, user=None) -> None:
         """Mark this result as published, making it visible to students."""
