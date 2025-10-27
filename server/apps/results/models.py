@@ -401,7 +401,7 @@ class Result(models.Model):
 
     def publish(self, user=None) -> None:
         """Mark this result as published, making it visible to students."""
-        if self.status in [self.ResultStatus.VERIFIED, self.ResultStatus.DRAFT]:
+        if self.status == self.ResultStatus.VERIFIED:
             old_status = self.status
             self.status = self.ResultStatus.PUBLISHED
             self.published_at = timezone.now()
