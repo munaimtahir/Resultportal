@@ -9,7 +9,7 @@ from django.core.exceptions import ValidationError
 from django.test import TestCase
 from django.utils import timezone
 
-from apps.accounts.models import Student, YearClass, StudentAccessToken
+from apps.accounts.models import Student, StudentAccessToken, YearClass
 
 from .importers import ResultCSVImporter
 from .models import Exam, ImportBatch, Result
@@ -346,8 +346,7 @@ class ResultModelTests(TestCase):
     def test_unpublish_method_clears_timestamp(self):
         """Test that unpublish() clears published_at timestamp."""
         result = self._build_result(
-            status=Result.ResultStatus.PUBLISHED,
-            published_at=timezone.now()
+            status=Result.ResultStatus.PUBLISHED, published_at=timezone.now()
         )
         result.save()
         self.assertTrue(result.is_published)
@@ -815,3 +814,221 @@ class StudentResultsViewTests(TestCase):
         self.client.force_login(user_no_profile)
         response = self.client.get("/me/results/")
         self.assertEqual(response.status_code, 302)
+
+
+class CSVImportViewTests(TestCase):
+    """Tests for CSV import views."""
+
+    def setUp(self):
+        # Create staff user with superuser permissions for admin access
+        self.staff_user = get_user_model().objects.create_user(
+            username="staff",
+            email="staff@pmc.edu.pk",
+            is_staff=True,
+            is_superuser=True,
+        )
+        # Create regular user
+        self.regular_user = get_user_model().objects.create_user(
+            username="user",
+            email="user@pmc.edu.pk",
+        )
+        # Create year class
+        self.year_class = YearClass.objects.create(label="2nd Year", order=2)
+        # Create exam
+        self.exam = Exam.objects.create(
+            year_class=self.year_class,
+            code="BLOCK-E-2025",
+            title="Block E Examination 2025",
+            kind=Exam.ExamKind.BLOCK,
+            block_letter="E",
+            exam_date=date(2025, 1, 15),
+        )
+
+    def test_student_csv_upload_requires_staff(self):
+        """Test that student CSV upload requires staff permission."""
+        self.client.force_login(self.regular_user)
+        response = self.client.get("/import/students/upload/")
+        self.assertEqual(response.status_code, 403)
+
+    def test_result_csv_upload_requires_staff(self):
+        """Test that result CSV upload requires staff permission."""
+        self.client.force_login(self.regular_user)
+        response = self.client.get("/import/results/upload/")
+        self.assertEqual(response.status_code, 403)
+
+    def test_student_csv_upload_accessible_to_staff(self):
+        """Test that staff can access student CSV upload."""
+        self.client.force_login(self.staff_user)
+        response = self.client.get("/import/students/upload/")
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, "results/import/upload_students.html")
+
+    def test_result_csv_upload_accessible_to_staff(self):
+        """Test that staff can access result CSV upload."""
+        self.client.force_login(self.staff_user)
+        response = self.client.get("/import/results/upload/")
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, "results/import/upload_results.html")
+
+    def test_student_csv_preview_redirects_without_session_data(self):
+        """Test that student CSV preview redirects if no session data."""
+        self.client.force_login(self.staff_user)
+        response = self.client.get("/import/students/preview/")
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(response.url.endswith("/import/students/upload/"))
+
+    def test_result_csv_preview_redirects_without_session_data(self):
+        """Test that result CSV preview redirects if no session data."""
+        self.client.force_login(self.staff_user)
+        response = self.client.get("/import/results/preview/")
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(response.url.endswith("/import/results/upload/"))
+
+    def test_student_csv_upload_with_valid_file(self):
+        """Test uploading a valid student CSV file."""
+        csv_content = (
+            "roll_no,first_name,last_name,display_name,official_email\n"
+            "PMC-101,John,Doe,John Doe,john@pmc.edu.pk\n"
+        )
+        csv_file = io.StringIO(csv_content)
+        csv_file.name = "students.csv"
+
+        self.client.force_login(self.staff_user)
+        response = self.client.post(
+            "/import/students/upload/",
+            {
+                "year_class": self.year_class.id,
+                "csv_file": io.BytesIO(csv_content.encode()),
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(response.url.endswith("/import/students/preview/"))
+
+    def test_result_csv_upload_with_valid_file(self):
+        """Test uploading a valid result CSV file."""
+        # Create student first
+        Student.objects.create(
+            roll_number="PMC-101",
+            first_name="John",
+            last_name="Doe",
+            display_name="John Doe",
+            official_email="john@pmc.edu.pk",
+            year_class=self.year_class,
+        )
+
+        csv_content = (
+            "roll_no,name,block,year,subject,written_marks,viva_marks,total_marks,grade,exam_date\n"
+            "PMC-101,John Doe,E,2025,Pathology,70,20,90,A,2025-01-15\n"
+        )
+
+        self.client.force_login(self.staff_user)
+        response = self.client.post(
+            "/import/results/upload/",
+            {
+                "exam": self.exam.id,
+                "csv_file": io.BytesIO(csv_content.encode()),
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(response.url.endswith("/import/results/preview/"))
+
+    def test_student_csv_upload_with_invalid_file(self):
+        """Test uploading an invalid student CSV file."""
+        csv_content = "roll_no,first_name\nPMC-101,John\n"  # Missing required columns
+
+        self.client.force_login(self.staff_user)
+        response = self.client.post(
+            "/import/students/upload/",
+            {
+                "year_class": self.year_class.id,
+                "csv_file": io.BytesIO(csv_content.encode()),
+            },
+            follow=True,
+        )
+        self.assertEqual(response.status_code, 200)
+        messages_list = list(response.context["messages"])
+        self.assertTrue(any("Missing required column" in str(m) for m in messages_list))
+
+    def test_result_csv_preview_and_submit(self):
+        """Test result CSV preview and submission flow."""
+        # Create student first
+        student = Student.objects.create(
+            roll_number="PMC-102",
+            first_name="Jane",
+            last_name="Smith",
+            display_name="Jane Smith",
+            official_email="jane@pmc.edu.pk",
+            year_class=self.year_class,
+        )
+
+        csv_content = (
+            "roll_no,name,block,year,subject,written_marks,viva_marks,total_marks,grade,exam_date\n"
+            "PMC-102,Jane Smith,E,2025,Anatomy,80,15,95,A+,2025-01-15\n"
+        )
+
+        # First upload the file
+        self.client.force_login(self.staff_user)
+        response = self.client.post(
+            "/import/results/upload/",
+            {
+                "exam": self.exam.id,
+                "csv_file": io.BytesIO(csv_content.encode()),
+            },
+        )
+
+        # Check that session contains preview data
+        session = self.client.session
+        self.assertIn("import_preview", session)
+        self.assertEqual(session["import_preview"]["type"], "results")
+
+        # Now visit the preview page
+        response = self.client.get("/import/results/preview/")
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, "results/import/preview_results.html")
+
+        # Submit the import
+        response = self.client.post("/import/results/preview/", follow=True)
+        self.assertEqual(response.status_code, 200)
+
+        # Check that result was created with SUBMITTED status
+        result = Result.objects.filter(student=student, subject="Anatomy").first()
+        self.assertIsNotNone(result)
+        self.assertEqual(result.status, Result.ResultStatus.SUBMITTED)
+        self.assertEqual(result.exam, self.exam)
+
+    def test_student_csv_preview_and_submit(self):
+        """Test student CSV preview and submission flow."""
+        csv_content = (
+            "roll_no,first_name,last_name,display_name,official_email\n"
+            "PMC-103,Alice,Johnson,Alice Johnson,alice@pmc.edu.pk\n"
+        )
+
+        # First upload the file
+        self.client.force_login(self.staff_user)
+        response = self.client.post(
+            "/import/students/upload/",
+            {
+                "year_class": self.year_class.id,
+                "csv_file": io.BytesIO(csv_content.encode()),
+            },
+        )
+
+        # Check that session contains preview data
+        session = self.client.session
+        self.assertIn("import_preview", session)
+        self.assertEqual(session["import_preview"]["type"], "students")
+
+        # Now visit the preview page
+        response = self.client.get("/import/students/preview/")
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, "results/import/preview_students.html")
+
+        # Submit the import
+        response = self.client.post("/import/students/preview/", follow=True)
+        self.assertEqual(response.status_code, 200)
+
+        # Check that student was created
+        student = Student.objects.filter(roll_number="PMC-103").first()
+        self.assertIsNotNone(student)
+        self.assertEqual(student.first_name, "Alice")
+        self.assertEqual(student.year_class, self.year_class)
