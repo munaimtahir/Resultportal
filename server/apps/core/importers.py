@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import csv
 from abc import ABC, abstractmethod
+from collections.abc import Iterable
 from contextlib import nullcontext
 from dataclasses import dataclass, field
-from typing import Any, IO, Iterable, Optional, TYPE_CHECKING
+from typing import IO, TYPE_CHECKING, Any
 
 from django.core.exceptions import ValidationError
 from django.db import transaction
@@ -34,7 +35,7 @@ class RowResult:
 class ImportSummary:
     """Summary information returned after running an importer."""
 
-    batch: "ImportBatch"
+    batch: ImportBatch
     created: int
     updated: int
     skipped: int
@@ -81,28 +82,28 @@ class BaseCSVImporter(ABC):
             pass
 
     @abstractmethod
-    def _get_import_type(self) -> "ImportBatch.ImportType":
+    def _get_import_type(self) -> ImportBatch.ImportType:
         """Return the import type for batch creation."""
         pass
 
     @abstractmethod
-    def _validate_headers(self, headers: Optional[Iterable[str]]) -> None:
+    def _validate_headers(self, headers: Iterable[str] | None) -> None:
         """Validate the CSV headers."""
         pass
 
     @abstractmethod
     def _process_row(
-        self, row_number: int, normalised: dict[str, str], dry_run: bool, batch: "ImportBatch"
+        self, row_number: int, normalised: dict[str, str], dry_run: bool, batch: ImportBatch
     ) -> tuple[str, int, int, int, RowResult]:
         """
         Process a single row and return action and counters.
-        
+
         Args:
             row_number: Current row number being processed
             normalised: Dict of normalised row data
             dry_run: Whether this is a dry run
             batch: The ImportBatch instance for this import
-        
+
         Returns:
             tuple: (action, created_delta, updated_delta, skipped_delta, row_result)
         """
@@ -111,7 +112,7 @@ class BaseCSVImporter(ABC):
     def _process(self, *, dry_run: bool) -> ImportSummary:
         """Core processing logic shared by both importers."""
         from apps.results.models import ImportBatch  # Avoid circular import
-        
+
         self._rewind_stream()
         reader = csv.DictReader(self.stream)
         self._validate_headers(reader.fieldnames)
@@ -131,11 +132,11 @@ class BaseCSVImporter(ABC):
         with context:
             for row_number, raw_row in enumerate(reader, start=2):
                 normalised = {key: (value or "").strip() for key, value in raw_row.items()}
-                
+
                 action, created_delta, updated_delta, skipped_delta, row_result = self._process_row(
                     row_number, normalised, dry_run, batch
                 )
-                
+
                 created += created_delta
                 updated += updated_delta
                 skipped += skipped_delta
@@ -145,12 +146,14 @@ class BaseCSVImporter(ABC):
             batch.created_rows = created
             batch.updated_rows = updated
             batch.skipped_rows = skipped
-            batch.save(update_fields=[
-                "row_count",
-                "created_rows",
-                "updated_rows",
-                "skipped_rows",
-            ])
+            batch.save(
+                update_fields=[
+                    "row_count",
+                    "created_rows",
+                    "updated_rows",
+                    "skipped_rows",
+                ]
+            )
 
             if not dry_run:
                 batch.mark_completed()
@@ -174,11 +177,9 @@ def flatten_validation_errors(error: ValidationError) -> list[str]:
             for field, field_errors in message_dict.items():
                 for field_error in field_errors:
                     messages.append(f"{field}: {field_error}")
-        else:
+        else:  # pragma: no cover - unreachable in Django's ValidationError
             messages.extend(error.messages)
     except AttributeError:
         # Fall back to general error messages when message_dict is not available
         messages.extend(error.messages)
     return messages
-
-

@@ -3,8 +3,8 @@
 import sys
 from pathlib import Path
 
-from django.core.management.base import BaseCommand, CommandError
 from django.contrib.auth import get_user_model
+from django.core.management.base import BaseCommand, CommandError
 
 from apps.accounts.importers import StudentCSVImporter
 
@@ -40,9 +40,7 @@ class Command(BaseCommand):
         # Default to dry-run if neither --dry-run nor --commit is specified
         if not dry_run and not commit:
             dry_run = True
-            self.stdout.write(
-                self.style.WARNING("No mode specified, defaulting to --dry-run")
-            )
+            self.stdout.write(self.style.WARNING("No mode specified, defaulting to --dry-run"))
 
         if dry_run and commit:
             raise CommandError("Cannot specify both --dry-run and --commit")
@@ -69,7 +67,7 @@ class Command(BaseCommand):
 
         # Process the import
         try:
-            with open(file_path, "r", encoding="utf-8") as f:
+            with open(file_path, encoding="utf-8") as f:
                 importer = StudentCSVImporter(
                     f,
                     started_by=user,
@@ -87,15 +85,9 @@ class Command(BaseCommand):
                 # Print summary
                 self.stdout.write(f"File: {csv_file}")
                 self.stdout.write(f"Total rows processed: {summary.row_count}")
-                self.stdout.write(
-                    self.style.SUCCESS(f"Created: {summary.created}")
-                )
-                self.stdout.write(
-                    self.style.WARNING(f"Updated: {summary.updated}")
-                )
-                self.stdout.write(
-                    self.style.ERROR(f"Skipped: {summary.skipped}")
-                )
+                self.stdout.write(self.style.SUCCESS(f"Created: {summary.created}"))
+                self.stdout.write(self.style.WARNING(f"Updated: {summary.updated}"))
+                self.stdout.write(self.style.ERROR(f"Skipped: {summary.skipped}"))
 
                 # Show errors if any
                 if summary.skipped > 0:

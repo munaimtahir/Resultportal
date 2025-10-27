@@ -2,15 +2,12 @@
 
 from __future__ import annotations
 
-import csv
-from contextlib import nullcontext
-from typing import IO, Iterable, Optional
+from collections.abc import Iterable
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
-from django.db import transaction
 
-from apps.core.importers import BaseCSVImporter, ImportSummary, RowResult, flatten_validation_errors
+from apps.core.importers import BaseCSVImporter, RowResult, flatten_validation_errors
 from apps.results.models import ImportBatch
 
 from .models import Student
@@ -31,7 +28,7 @@ class StudentCSVImporter(BaseCSVImporter):
     def _get_import_type(self) -> ImportBatch.ImportType:
         return ImportBatch.ImportType.STUDENTS
 
-    def _validate_headers(self, headers: Optional[Iterable[str]]) -> None:
+    def _validate_headers(self, headers: Iterable[str] | None) -> None:
         """Validate that required CSV headers are present."""
         if not headers:
             raise ValueError("students.csv must include a header row.")
@@ -48,9 +45,9 @@ class StudentCSVImporter(BaseCSVImporter):
         row_result = RowResult(row_number=row_number, action="skipped", data=normalised)
 
         # Track seen values within this import
-        if not hasattr(self, '_seen_roll_numbers'):
+        if not hasattr(self, "_seen_roll_numbers"):
             self._seen_roll_numbers: set[str] = set()
-        if not hasattr(self, '_seen_emails'):
+        if not hasattr(self, "_seen_emails"):
             self._seen_emails: set[str] = set()
 
         errors = self._validate_basic_fields(normalised, self._seen_roll_numbers, self._seen_emails)
@@ -78,13 +75,9 @@ class StudentCSVImporter(BaseCSVImporter):
             if not changes:
                 row_result.messages.append("No changes detected; record already up to date.")
             elif dry_run:
-                row_result.messages.append(
-                    f"Would apply {len(changes)} field change(s)."
-                )
+                row_result.messages.append(f"Would apply {len(changes)} field change(s).")
             else:
-                row_result.messages.append(
-                    f"Applied {len(changes)} field change(s)."
-                )
+                row_result.messages.append(f"Applied {len(changes)} field change(s).")
             return "updated", 0, 1, 0, row_result
 
     # ------------------------------------------------------------------
@@ -130,7 +123,6 @@ class StudentCSVImporter(BaseCSVImporter):
 
         return errors
 
-
     def _normalize_status(self, raw_status: str | None) -> str:
         value = (raw_status or "").strip().lower()
         if not value:
@@ -149,12 +141,9 @@ class StudentCSVImporter(BaseCSVImporter):
             "recovery_email": row.get("recovery_email", ""),
             "batch_code": row.get("batch_code", ""),
             "status": self._normalize_status(row.get("status", "")),
-
         }
 
-    def _validate_against_model(
-        self, student: Student | None, data: dict[str, str]
-    ) -> list[str]:
+    def _validate_against_model(self, student: Student | None, data: dict[str, str]) -> list[str]:
         if student is None:
             candidate = Student(**data)
             try:

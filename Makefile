@@ -1,39 +1,62 @@
-.PHONY: dev migrate superuser run collect import-students import-results install fmt lint test analytics
+.PHONY: install fmt lint test migrate superuser run collect import-students import-results clean help
 
-install:
-	pip install -r requirements.txt
+help:  ## Show this help message
+	@echo "Available commands:"
+	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-20s\033[0m %s\n", $$1, $$2}'
 
-dev:
-	python -m venv venv && . venv/bin/activate && pip install -r requirements.txt || true
+install:  ## Install dependencies in virtual environment
+	python -m venv .venv
+	. .venv/bin/activate && pip install --upgrade pip setuptools wheel
+	. .venv/bin/activate && pip install -r requirements.txt
 
-migrate:
-	cd server && python manage.py migrate
+fmt:  ## Format code with black and isort
+	. .venv/bin/activate && black server/
+	. .venv/bin/activate && isort server/
 
-superuser:
-	cd server && python manage.py createsuperuser
+lint:  ## Run linters (ruff, black check, isort check)
+	. .venv/bin/activate && ruff check server/
+	. .venv/bin/activate && black --check server/
+	. .venv/bin/activate && isort --check-only server/
 
-run:
-	cd server && python manage.py runserver 0.0.0.0:8000
+test:  ## Run tests with coverage
+	. .venv/bin/activate && pytest
 
-collect:
-	cd server && python manage.py collectstatic --noinput
+test-fast:  ## Run tests without coverage
+	. .venv/bin/activate && pytest --no-cov
 
-import-students:
-	cd server && python manage.py import_students ../students.csv
+migrate:  ## Run Django migrations
+	. .venv/bin/activate && cd server && python manage.py migrate
 
-import-results:
-	cd server && python manage.py import_results ../results.csv
+makemigrations:  ## Create new migrations
+	. .venv/bin/activate && cd server && python manage.py makemigrations
 
-fmt:
-	black server/
-	ruff check --fix server/
+superuser:  ## Create Django superuser
+	. .venv/bin/activate && cd server && python manage.py createsuperuser
 
-lint:
-	ruff check server/
-	black --check server/
+run:  ## Run development server
+	. .venv/bin/activate && cd server && python manage.py runserver 0.0.0.0:8000
 
-test:
-	cd server && pytest --cov=apps --cov-report=term-missing
+collect:  ## Collect static files
+	. .venv/bin/activate && cd server && python manage.py collectstatic --noinput
 
-analytics:
-	cd server && python manage.py compute_analytics
+import-students:  ## Import students from CSV (use FILE=path/to/file.csv)
+	. .venv/bin/activate && cd server && python manage.py import_students $(FILE) --commit
+
+import-students-dry-run:  ## Preview student import (use FILE=path/to/file.csv)
+	. .venv/bin/activate && cd server && python manage.py import_students $(FILE) --dry-run
+
+import-results:  ## Import results from CSV (use FILE=path/to/file.csv)
+	. .venv/bin/activate && cd server && python manage.py import_results $(FILE) --commit
+
+import-results-dry-run:  ## Preview results import (use FILE=path/to/file.csv)
+	. .venv/bin/activate && cd server && python manage.py import_results $(FILE) --dry-run
+
+clean:  ## Clean build artifacts and caches
+	find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
+	find . -type f -name "*.pyc" -delete
+	find . -type f -name "*.pyo" -delete
+	rm -rf .pytest_cache htmlcov .coverage
+	rm -rf build dist *.egg-info
+
+check:  ## Run Django system checks
+	. .venv/bin/activate && cd server && python manage.py check

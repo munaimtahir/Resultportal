@@ -318,6 +318,55 @@ class ResultModelTests(TestCase):
         self.assertNotIn(draft, published_results)
 
 
+        self.assertIn(published, Result.objects.published())
+        self.assertNotIn(draft, Result.objects.published())
+
+    def test_publish_method_sets_timestamp(self):
+        """Test that publish() sets published_at timestamp."""
+        result = self._build_result()
+        result.save()
+        self.assertIsNone(result.published_at)
+        self.assertFalse(result.is_published)
+
+        result.publish()
+        result.refresh_from_db()
+        self.assertIsNotNone(result.published_at)
+        self.assertTrue(result.is_published)
+
+    def test_publish_method_idempotent(self):
+        """Test that calling publish() multiple times is safe."""
+        result = self._build_result()
+        result.save()
+        result.publish()
+        first_published_at = result.published_at
+
+        result.publish()
+        result.refresh_from_db()
+        # Should keep the original timestamp
+        self.assertEqual(result.published_at, first_published_at)
+
+    def test_unpublish_method_clears_timestamp(self):
+        """Test that unpublish() clears published_at timestamp."""
+        result = self._build_result(published_at=timezone.now())
+        result.save()
+        self.assertTrue(result.is_published)
+
+        result.unpublish()
+        result.refresh_from_db()
+        self.assertIsNone(result.published_at)
+        self.assertFalse(result.is_published)
+
+    def test_unpublish_method_idempotent(self):
+        """Test that calling unpublish() on unpublished result is safe."""
+        result = self._build_result()
+        result.save()
+        self.assertIsNone(result.published_at)
+
+        result.unpublish()
+        result.refresh_from_db()
+        self.assertIsNone(result.published_at)
+
+
 class ResultCSVImporterTests(TestCase):
     def setUp(self) -> None:
         super().setUp()
@@ -424,3 +473,294 @@ class ResultCSVImporterTests(TestCase):
         self.assertEqual(new_result.import_batch, summary.batch)
 
         self.assertFalse(Result.objects.filter(subject="Physiology").exists())
+
+    def test_missing_headers_raises_error(self):
+        """Test that missing required headers raises ValueError."""
+        csv_no_headers = io.StringIO("PMC-001,Test,E,2025,Pathology\n")
+        importer = ResultCSVImporter(csv_no_headers, started_by=self.staff_user)
+
+        with self.assertRaises(ValueError) as cm:
+            importer.preview()
+        self.assertIn("Missing required column", str(cm.exception))
+
+    def test_empty_csv_raises_error(self):
+        """Test that CSV without headers raises ValueError."""
+        csv_empty = io.StringIO("")
+        importer = ResultCSVImporter(csv_empty, started_by=self.staff_user)
+
+        with self.assertRaises(ValueError) as cm:
+            importer.preview()
+        self.assertIn("must include a header row", str(cm.exception))
+
+    def test_missing_required_fields(self):
+        """Test that missing required fields are caught."""
+        next_year = datetime.now().year + 1
+        csv_missing = io.StringIO(
+            "respondent_id,roll_no,name,block,year,subject,written_marks,viva_marks,total_marks,grade,exam_date\n"
+            f",PMC-001,,E,{next_year},Pathology,70,20,90,A,{next_year}-01-15\n"  # Missing name
+        )
+        importer = ResultCSVImporter(csv_missing, started_by=self.staff_user)
+        summary = importer.preview()
+
+        # Row should be skipped
+        self.assertEqual(summary.skipped, 1)
+
+    def test_invalid_year_format(self):
+        """Test that invalid year format is caught."""
+        next_year = datetime.now().year + 1
+        csv_invalid = io.StringIO(
+            "respondent_id,roll_no,name,block,year,subject,written_marks,viva_marks,total_marks,grade,exam_date\n"
+            f",PMC-001,Test,E,invalid,Pathology,70,20,90,A,{next_year}-01-15\n"
+        )
+        importer = ResultCSVImporter(csv_invalid, started_by=self.staff_user)
+        summary = importer.preview()
+
+        self.assertEqual(summary.skipped, 1)
+        self.assertTrue(
+            any("year must be an integer" in " ".join(row.errors) for row in summary.row_results)
+        )
+
+    def test_invalid_date_format(self):
+        """Test that invalid date format is caught."""
+        next_year = datetime.now().year + 1
+        csv_invalid = io.StringIO(
+            "respondent_id,roll_no,name,block,year,subject,written_marks,viva_marks,total_marks,grade,exam_date\n"
+            f",PMC-001,Test,E,{next_year},Pathology,70,20,90,A,invalid-date\n"
+        )
+        importer = ResultCSVImporter(csv_invalid, started_by=self.staff_user)
+        summary = importer.preview()
+
+        self.assertEqual(summary.skipped, 1)
+        self.assertTrue(any("exam_date" in " ".join(row.errors) for row in summary.row_results))
+
+    def test_invalid_marks_format(self):
+        """Test that invalid marks format is caught."""
+        next_year = datetime.now().year + 1
+        csv_invalid = io.StringIO(
+            "respondent_id,roll_no,name,block,year,subject,written_marks,viva_marks,total_marks,grade,exam_date\n"
+            f",PMC-001,Test,E,{next_year},Pathology,invalid,20,90,A,{next_year}-01-15\n"
+        )
+        importer = ResultCSVImporter(csv_invalid, started_by=self.staff_user)
+        summary = importer.preview()
+
+        self.assertEqual(summary.skipped, 1)
+        self.assertTrue(any("written_marks" in " ".join(row.errors) for row in summary.row_results))
+
+    def test_duplicate_result_in_file(self):
+        """Test that duplicate results within file are caught."""
+        next_year = datetime.now().year + 1
+        # Use the existing student from setUp
+        csv_dupes = io.StringIO(
+            "respondent_id,roll_no,name,block,year,subject,written_marks,viva_marks,total_marks,grade,exam_date\n"
+            f",PMC-001,Test,E,{next_year},Chemistry,70,20,90,A,{next_year}-01-20\n"
+            f",PMC-001,Test,E,{next_year},Chemistry,80,20,100,A+,{next_year}-01-20\n"
+        )
+        importer = ResultCSVImporter(csv_dupes, started_by=self.staff_user)
+        summary = importer.preview()
+
+        # Second row should be skipped due to duplicate
+        self.assertEqual(summary.skipped, 1)
+        self.assertEqual(summary.created, 1)
+
+    def test_no_changes_detected_on_result_update(self):
+        """Test that updating result with no changes is handled."""
+        next_year = datetime.now().year + 1
+        # Import exact same data as existing result
+        csv_same = io.StringIO(
+            "respondent_id,roll_no,name,block,year,subject,written_marks,viva_marks,total_marks,grade,exam_date\n"
+            f"resp-1,PMC-001,Test Student,E,{next_year},Pathology,65,20,85,B,{next_year}-01-15\n"
+        )
+        importer = ResultCSVImporter(csv_same, started_by=self.staff_user)
+        summary = importer.preview()
+
+        # Should be updated but with message about no changes
+        self.assertEqual(summary.updated, 1)
+        row_result = summary.row_results[0]
+        self.assertIn("No changes detected", " ".join(row_result.messages))
+
+
+class HomeViewTests(TestCase):
+    """Tests for the home view."""
+
+    def test_home_page_accessible(self):
+        """Test that home page is accessible."""
+        response = self.client.get("/")
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, "results/home.html")
+
+    def test_home_redirects_authenticated_user_with_student_profile(self):
+        """Test that authenticated users with student profiles are redirected."""
+        user = get_user_model().objects.create_user(
+            username="student1",
+            email="student1@pmc.edu.pk",
+        )
+        student = Student.objects.create(
+            official_email="student1@pmc.edu.pk",
+            roll_number="PMC-100",
+            display_name="Test Student",
+            user=user,
+        )
+        self.client.force_login(user)
+        response = self.client.get("/")
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("/me/", response.url)
+
+
+class StudentProfileViewTests(TestCase):
+    """Tests for the student profile view."""
+
+    def setUp(self):
+        self.user = get_user_model().objects.create_user(
+            username="student1",
+            email="student1@pmc.edu.pk",
+        )
+        self.student = Student.objects.create(
+            official_email="student1@pmc.edu.pk",
+            roll_number="PMC-100",
+            display_name="Test Student",
+            user=self.user,
+        )
+
+    def test_profile_requires_login(self):
+        """Test that profile page requires authentication."""
+        response = self.client.get("/me/")
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("/accounts/login/", response.url)
+
+    def test_profile_displays_student_info(self):
+        """Test that profile page displays student information."""
+        self.client.force_login(self.user)
+        response = self.client.get("/me/")
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, "results/student_profile.html")
+        self.assertEqual(response.context["student"], self.student)
+
+    def test_profile_redirects_user_without_student_profile(self):
+        """Test that users without student profiles are redirected."""
+        user_no_profile = get_user_model().objects.create_user(
+            username="noProfile",
+            email="noprofile@pmc.edu.pk",
+        )
+        self.client.force_login(user_no_profile)
+        response = self.client.get("/me/")
+        self.assertEqual(response.status_code, 302)
+
+
+class StudentResultsViewTests(TestCase):
+    """Tests for the student results view."""
+
+    def setUp(self):
+        self.user = get_user_model().objects.create_user(
+            username="student1",
+            email="student1@pmc.edu.pk",
+        )
+        self.student = Student.objects.create(
+            official_email="student1@pmc.edu.pk",
+            roll_number="PMC-100",
+            display_name="Test Student",
+            user=self.user,
+        )
+        self.batch = ImportBatch.objects.create(
+            import_type=ImportBatch.ImportType.RESULTS,
+            is_dry_run=False,
+        )
+
+    def test_results_page_requires_login(self):
+        """Test that results page requires authentication."""
+        response = self.client.get("/me/results/")
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("/accounts/login/", response.url)
+
+    def test_results_page_only_shows_published_results(self):
+        """Test that only published results are shown."""
+        from django.utils import timezone
+
+        # Create published result
+        published = Result.objects.create(
+            student=self.student,
+            import_batch=self.batch,
+            roll_number=self.student.roll_number,
+            name="Test Student",
+            block="E",
+            year=2025,
+            subject="Pathology",
+            written_marks=Decimal("70.00"),
+            viva_marks=Decimal("20.00"),
+            total_marks=Decimal("90.00"),
+            grade="A",
+            exam_date=date(2025, 1, 15),
+            published_at=timezone.now(),
+        )
+
+        # Create unpublished result
+        unpublished = Result.objects.create(
+            student=self.student,
+            import_batch=self.batch,
+            roll_number=self.student.roll_number,
+            name="Test Student",
+            block="E",
+            year=2025,
+            subject="Anatomy",
+            written_marks=Decimal("80.00"),
+            viva_marks=Decimal("20.00"),
+            total_marks=Decimal("100.00"),
+            grade="A+",
+            exam_date=date(2025, 1, 16),
+            published_at=None,
+        )
+
+        self.client.force_login(self.user)
+        response = self.client.get("/me/results/")
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, "results/student_results.html")
+        results = response.context["results"]
+        self.assertIn(published, results)
+        self.assertNotIn(unpublished, results)
+
+    def test_results_page_only_shows_own_results(self):
+        """Test that students only see their own results."""
+        from django.utils import timezone
+
+        # Create another student
+        other_user = get_user_model().objects.create_user(
+            username="student2",
+            email="student2@pmc.edu.pk",
+        )
+        other_student = Student.objects.create(
+            official_email="student2@pmc.edu.pk",
+            roll_number="PMC-200",
+            display_name="Other Student",
+            user=other_user,
+        )
+
+        # Create result for other student
+        other_result = Result.objects.create(
+            student=other_student,
+            import_batch=self.batch,
+            roll_number=other_student.roll_number,
+            name="Other Student",
+            block="E",
+            year=2025,
+            subject="Pathology",
+            written_marks=Decimal("70.00"),
+            viva_marks=Decimal("20.00"),
+            total_marks=Decimal("90.00"),
+            grade="A",
+            exam_date=date(2025, 1, 15),
+            published_at=timezone.now(),
+        )
+
+        self.client.force_login(self.user)
+        response = self.client.get("/me/results/")
+        results = response.context["results"]
+        self.assertNotIn(other_result, results)
+
+    def test_results_page_redirects_user_without_student_profile(self):
+        """Test that users without student profiles are redirected."""
+        user_no_profile = get_user_model().objects.create_user(
+            username="noProfile",
+            email="noprofile@pmc.edu.pk",
+        )
+        self.client.force_login(user_no_profile)
+        response = self.client.get("/me/results/")
+        self.assertEqual(response.status_code, 302)

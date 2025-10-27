@@ -38,7 +38,7 @@ class YearClass(models.Model):
 class StudentQuerySet(models.QuerySet["Student"]):
     """Custom queryset with helpers used by the importer and pipeline."""
 
-    def active(self) -> "StudentQuerySet":
+    def active(self) -> StudentQuerySet:
         """Return only students whose status is ``ACTIVE``."""
 
         return self.filter(status=Student.Status.ACTIVE)
@@ -116,7 +116,6 @@ class Student(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
-
     class Meta:
         ordering = ("official_email",)
         indexes = [
@@ -130,6 +129,12 @@ class Student(models.Model):
                 condition=models.Q(year_class__isnull=False, roll_number__isnull=False)
             )
         ]
+
+    def __str__(self) -> str:
+        """Return string representation of Student."""
+        if self.display_name:
+            return f"{self.display_name} ({self.roll_number or self.official_email})"
+        return self.roll_number or self.official_email
 
     @property
     def is_active(self) -> bool:

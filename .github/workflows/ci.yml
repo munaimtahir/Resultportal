@@ -2,20 +2,55 @@ name: CI
 
 on:
   push:
-    branches: [ main, develop, copilot/* ]
+    branches: [ main, develop, copilot/** ]
   pull_request:
     branches: [ main, develop ]
 
+permissions:
+  contents: read
+
 jobs:
-  test:
+  lint:
+    name: Lint and Format Check
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+        cache: 'pip'
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+    
+    - name: Check code formatting with black
+      run: black --check server/
+    
+    - name: Check import sorting with isort
+      run: isort --check-only server/
+    
+    - name: Lint with ruff
+      run: ruff check server/
+
+  test:
+    name: Test (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
     strategy:
+      fail-fast: false
       matrix:
         python-version: ['3.11', '3.12']
     
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
+    - uses: actions/checkout@v4
     
     - name: Set up Python ${{ matrix.python-version }}
       uses: actions/setup-python@v5
@@ -28,52 +63,58 @@ jobs:
         python -m pip install --upgrade pip
         pip install -r requirements.txt
     
-    - name: Run migrations
+    - name: Run Django checks
       run: |
         cd server
-        python manage.py migrate --no-input
-      env:
-        DJANGO_SECRET_KEY: test-secret-key-for-ci
-        DJANGO_DEBUG: True
-    
-    - name: Run linting
-      run: |
-        ruff check server/ || true
-        black --check server/ || true
-      continue-on-error: true
+        python manage.py check
     
     - name: Run tests with coverage
-      run: |
-        cd server
-        pytest --cov=apps --cov-report=term-missing --cov-report=xml
-      env:
-        DJANGO_SECRET_KEY: test-secret-key-for-ci
-        DJANGO_DEBUG: True
+      run: pytest
     
-    - name: Upload coverage reports
+    - name: Upload coverage reports to Codecov
+      if: matrix.python-version == '3.12'
       uses: codecov/codecov-action@v4
       with:
-        file: ./server/coverage.xml
+        files: ./coverage.xml
         fail_ci_if_error: false
-      if: matrix.python-version == '3.12'
+        verbose: true
       continue-on-error: true
+    
+    - name: Archive coverage HTML report
+      if: matrix.python-version == '3.12'
+      uses: actions/upload-artifact@v4
+      with:
+        name: coverage-html-report
+        path: htmlcov/
+        retention-days: 7
 
-  codeql:
-    name: CodeQL Security Scan
+  build:
+    name: Build Check
     runs-on: ubuntu-latest
     permissions:
-      security-events: write
-      actions: read
       contents: read
+    needs: [lint, test]
     
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
+    - uses: actions/checkout@v4
     
-    - name: Initialize CodeQL
-      uses: github/codeql-action/init@v3
+    - name: Set up Python
+      uses: actions/setup-python@v5
       with:
-        languages: python
+        python-version: '3.12'
+        cache: 'pip'
     
-    - name: Perform CodeQL Analysis
-      uses: github/codeql-action/analyze@v3
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+    
+    - name: Collect static files
+      run: |
+        cd server
+        python manage.py collectstatic --noinput
+    
+    - name: Check for migrations
+      run: |
+        cd server
+        python manage.py makemigrations --check --dry-run --no-input
