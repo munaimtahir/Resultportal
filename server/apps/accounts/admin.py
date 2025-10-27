@@ -2,7 +2,7 @@
 
 from django.contrib import admin
 
-from .models import Student, YearClass, StudentAccessToken
+from .models import Student, StudentAccessToken, YearClass
 
 
 @admin.register(YearClass)

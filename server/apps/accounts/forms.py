@@ -32,15 +32,13 @@ class TokenRequestForm(forms.Form):
 
         # Require at least one contact method
         if not email and not phone:
-            raise ValidationError(
-                "Please provide either your institutional email or phone number."
-            )
+            raise ValidationError("Please provide either your institutional email or phone number.")
 
         # Verify student exists and contact info matches
         try:
             student = Student.objects.get(roll_number=roll_number)
-        except Student.DoesNotExist:
-            raise ValidationError("Student with this roll number not found.")
+        except Student.DoesNotExist as e:
+            raise ValidationError("Student with this roll number not found.") from e
 
         # Verify contact information
         if email and student.official_email.lower() != email.lower():
@@ -71,12 +69,10 @@ class TokenAuthenticateForm(forms.Form):
 
         try:
             token = StudentAccessToken.objects.get(code=token_code)
-        except StudentAccessToken.DoesNotExist:
-            raise ValidationError("Invalid access token.")
+        except StudentAccessToken.DoesNotExist as e:
+            raise ValidationError("Invalid access token.") from e
 
         if not token.is_valid():
-            raise ValidationError(
-                "This access token has expired or has already been used."
-            )
+            raise ValidationError("This access token has expired or has already been used.")
 
         return token

@@ -180,7 +180,9 @@ class Result(models.Model):
         default=ResultStatus.DRAFT,
         help_text="Current workflow status",
     )
-    status_log = models.JSONField(default=list, blank=True, help_text="Audit trail of status changes")
+    status_log = models.JSONField(
+        default=list, blank=True, help_text="Audit trail of status changes"
+    )
     verified_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,

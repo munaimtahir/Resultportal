@@ -9,7 +9,7 @@ from django.core.exceptions import ValidationError
 from django.test import TestCase
 from django.utils import timezone
 
-from apps.accounts.models import Student, YearClass, StudentAccessToken
+from apps.accounts.models import Student, StudentAccessToken, YearClass
 
 from .importers import ResultCSVImporter
 from .models import Exam, ImportBatch, Result
@@ -171,14 +171,12 @@ class ImportBatchModelTests(TestCase):
 class ResultModelTests(TestCase):
     def setUp(self) -> None:
         from django.contrib.auth import get_user_model
-        
+
         User = get_user_model()
         self.staff_user = User.objects.create_user(
-            username="admin", 
-            email="admin@pmc.edu.pk",
-            is_staff=True
+            username="admin", email="admin@pmc.edu.pk", is_staff=True
         )
-        
+
         self.year_class = YearClass.objects.create(label="2nd Year", order=2)
         self.student = Student.objects.create(
             year_class=self.year_class,
@@ -348,7 +346,9 @@ class ResultModelTests(TestCase):
 
     def test_unpublish_method_clears_timestamp(self):
         """Test that unpublish() clears published_at timestamp."""
-        result = self._build_result(published_at=timezone.now(), status=Result.ResultStatus.PUBLISHED)
+        result = self._build_result(
+            published_at=timezone.now(), status=Result.ResultStatus.PUBLISHED
+        )
         result.save()
         self.assertTrue(result.is_published)
 
@@ -372,13 +372,13 @@ class ResultModelTests(TestCase):
         result1 = self._build_result(subject="Anatomy")
         result1.save()
         result1.submit()
-        
+
         result2 = self._build_result(subject="Biochem")
         result2.save()
-        
+
         submitted = Result.objects.by_status(Result.ResultStatus.SUBMITTED)
         draft = Result.objects.by_status(Result.ResultStatus.DRAFT)
-        
+
         self.assertIn(result1, submitted)
         self.assertNotIn(result2, submitted)
         self.assertIn(result2, draft)
@@ -400,11 +400,11 @@ class ResultModelTests(TestCase):
         result = self._build_result(
             written_marks=Decimal("70.00"),
             viva_marks=Decimal("20.00"),
-            total_marks=Decimal("90.00")
+            total_marks=Decimal("90.00"),
         )
         result.sync_marks_with_flags()
         result.save()
-        
+
         self.assertEqual(result.theory, Decimal("70.00"))
         self.assertEqual(result.practical, Decimal("20.00"))
         self.assertEqual(result.total, Decimal("90.00"))
@@ -417,7 +417,7 @@ class ResultModelTests(TestCase):
             total_marks=None,
             theory=Decimal("70.00"),
             practical=Decimal("20.00"),
-            total=Decimal("90.00")
+            total=Decimal("90.00"),
         )
         # Should not raise ValidationError for null legacy marks
         result.full_clean()
@@ -1035,3 +1035,274 @@ class TokenAccessEdgeCases(TestCase):
         self.assertEqual(response.status_code, 200)
         # Should return empty queryset
         self.assertEqual(len(response.context["results"]), 0)
+
+
+class CSVImportViewsTests(TestCase):
+    """Tests for CSV import views."""
+
+    def setUp(self):
+        from django.contrib.auth import get_user_model
+
+        User = get_user_model()
+        self.staff_user = User.objects.create_user(
+            username="staff", email="staff@pmc.edu.pk", is_staff=True
+        )
+        self.year_class = YearClass.objects.create(label="1st Year", order=1)
+        self.exam = Exam.objects.create(
+            year_class=self.year_class,
+            code="BLOCK-A-2025",
+            title="Block A Exam",
+            kind=Exam.ExamKind.BLOCK,
+            exam_date=date.today(),
+        )
+
+    def test_student_csv_upload_requires_staff(self):
+        """Test that student CSV upload requires staff authentication."""
+        response = self.client.get("/import/students/upload/")
+        self.assertEqual(response.status_code, 302)
+
+    def test_student_csv_upload_view_accessible_for_staff(self):
+        """Test that student CSV upload view is accessible for staff."""
+        self.client.force_login(self.staff_user)
+        response = self.client.get("/import/students/upload/")
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, "results/import/upload_students.html")
+
+    def test_student_csv_upload_with_valid_file(self):
+        """Test uploading a valid student CSV file."""
+        import io
+
+        csv_content = """roll_no,first_name,last_name,display_name,official_email
+PMC-001,John,Doe,John Doe,john@pmc.edu.pk
+PMC-002,Jane,Smith,Jane Smith,jane@pmc.edu.pk"""
+        csv_file = io.BytesIO(csv_content.encode("utf-8"))
+        csv_file.name = "students.csv"
+
+        self.client.force_login(self.staff_user)
+        response = self.client.post(
+            "/import/students/upload/",
+            {"csv_file": csv_file, "year_class": self.year_class.id},
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertRedirects(response, "/import/students/preview/")
+
+        # Check session data
+        self.assertIn("student_import_preview", self.client.session)
+
+    def test_student_csv_preview_shows_summary(self):
+        """Test that student CSV preview shows import summary."""
+        # Set up session with preview data
+        session = self.client.session
+        session["student_import_preview"] = {
+            "year_class_id": self.year_class.id,
+            "csv_content": "roll_no,first_name,last_name,display_name,official_email\nPMC-001,John,Doe,John Doe,john@pmc.edu.pk",
+            "row_count": 1,
+            "created": 1,
+            "updated": 0,
+            "skipped": 0,
+            "has_errors": False,
+            "errors": [],
+            "warnings": [],
+        }
+        session.save()
+
+        self.client.force_login(self.staff_user)
+        response = self.client.get("/import/students/preview/")
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, "results/import/preview_students.html")
+        self.assertContains(response, "1")  # Row count
+
+    def test_student_csv_preview_submit_creates_batch(self):
+        """Test that submitting student CSV preview creates an import batch."""
+        # Set up session with preview data
+        session = self.client.session
+        session["student_import_preview"] = {
+            "year_class_id": self.year_class.id,
+            "csv_content": "roll_no,first_name,last_name,display_name,official_email\nPMC-100,John,Doe,John Doe,john100@pmc.edu.pk",
+            "row_count": 1,
+            "created": 1,
+            "updated": 0,
+            "skipped": 0,
+            "has_errors": False,
+            "errors": [],
+            "warnings": [],
+        }
+        session.save()
+
+        self.client.force_login(self.staff_user)
+        batch_count_before = ImportBatch.objects.count()
+
+        response = self.client.post("/import/students/preview/", {"submit": "1"})
+        self.assertEqual(response.status_code, 302)
+
+        # Check that batch was created
+        self.assertEqual(ImportBatch.objects.count(), batch_count_before + 1)
+        batch = ImportBatch.objects.latest("id")
+        self.assertEqual(batch.import_type, ImportBatch.ImportType.STUDENTS)
+        self.assertFalse(batch.is_dry_run)
+
+    def test_result_csv_upload_requires_staff(self):
+        """Test that result CSV upload requires staff authentication."""
+        response = self.client.get("/import/results/upload/")
+        self.assertEqual(response.status_code, 302)
+
+    def test_result_csv_upload_view_accessible_for_staff(self):
+        """Test that result CSV upload view is accessible for staff."""
+        self.client.force_login(self.staff_user)
+        response = self.client.get("/import/results/upload/")
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, "results/import/upload_results.html")
+
+    def test_result_csv_upload_with_valid_file(self):
+        """Test uploading a valid result CSV file."""
+        import io
+
+        # Create a student first
+        Student.objects.create(
+            year_class=self.year_class,
+            official_email="student@pmc.edu.pk",
+            roll_number="PMC-100",
+        )
+
+        csv_content = """roll_no,name,block,year,subject,written_marks,viva_marks,total_marks,grade,exam_date
+PMC-100,Test Student,A,1,Anatomy,70,20,90,A,2025-01-15"""
+        csv_file = io.BytesIO(csv_content.encode("utf-8"))
+        csv_file.name = "results.csv"
+
+        self.client.force_login(self.staff_user)
+        response = self.client.post(
+            "/import/results/upload/", {"csv_file": csv_file, "exam": self.exam.id}
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertRedirects(response, "/import/results/preview/")
+
+        # Check session data
+        self.assertIn("result_import_preview", self.client.session)
+
+    def test_result_csv_preview_shows_summary(self):
+        """Test that result CSV preview shows import summary."""
+        # Create a batch for the preview
+        batch = ImportBatch.objects.create(
+            import_type=ImportBatch.ImportType.RESULTS,
+            exam=self.exam,
+            started_by=self.staff_user,
+            is_dry_run=True,
+        )
+
+        # Set up session with preview data
+        session = self.client.session
+        session["result_import_preview"] = {
+            "exam_id": self.exam.id,
+            "batch_id": batch.id,
+            "csv_content": "roll_no,name,block,year,subject,written_marks,viva_marks,total_marks,grade,exam_date\nPMC-100,Test,A,1,Anatomy,70,20,90,A,2025-01-15",
+            "filename": "results.csv",
+            "row_count": 1,
+            "created": 1,
+            "updated": 0,
+            "skipped": 0,
+            "has_errors": False,
+            "errors": [],
+            "warnings": [],
+        }
+        session.save()
+
+        self.client.force_login(self.staff_user)
+        response = self.client.get("/import/results/preview/")
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, "results/import/preview_results.html")
+        self.assertContains(response, self.exam.title)
+
+    def test_result_csv_preview_submit_creates_results(self):
+        """Test that submitting result CSV preview creates results."""
+        # Create a student first
+        student = Student.objects.create(
+            year_class=self.year_class,
+            official_email="student@pmc.edu.pk",
+            roll_number="PMC-100",
+        )
+
+        # Create a batch for the preview
+        batch = ImportBatch.objects.create(
+            import_type=ImportBatch.ImportType.RESULTS,
+            exam=self.exam,
+            started_by=self.staff_user,
+            is_dry_run=True,
+        )
+
+        # Set up session with preview data
+        session = self.client.session
+        session["result_import_preview"] = {
+            "exam_id": self.exam.id,
+            "batch_id": batch.id,
+            "csv_content": "roll_no,name,block,year,subject,written_marks,viva_marks,total_marks,grade,exam_date\nPMC-100,Test,A,1,Anatomy,70,20,90,A,2025-01-15",
+            "filename": "results.csv",
+            "row_count": 1,
+            "created": 1,
+            "updated": 0,
+            "skipped": 0,
+            "has_errors": False,
+            "errors": [],
+            "warnings": [],
+        }
+        session.save()
+
+        self.client.force_login(self.staff_user)
+        result_count_before = Result.objects.count()
+
+        response = self.client.post("/import/results/preview/", {"submit": "1"})
+        self.assertEqual(response.status_code, 302)
+
+        # Check that results were created
+        self.assertGreater(Result.objects.count(), result_count_before)
+
+        # Check that a new batch was created and marked as completed
+        new_batch = ImportBatch.objects.latest("id")
+        self.assertFalse(new_batch.is_dry_run)
+        self.assertIsNotNone(new_batch.completed_at)
+
+    def test_csv_preview_without_session_redirects(self):
+        """Test that accessing preview without session data redirects."""
+        self.client.force_login(self.staff_user)
+
+        # Try to access preview without upload
+        response = self.client.get("/import/students/preview/")
+        self.assertEqual(response.status_code, 200)
+        # Should show error message (checked via messages framework)
+
+        response = self.client.get("/import/results/preview/")
+        self.assertEqual(response.status_code, 200)
+        # Should show error message
+
+    def test_student_preview_post_without_session_redirects(self):
+        """Test posting to preview without session redirects."""
+        self.client.force_login(self.staff_user)
+        response = self.client.post("/import/students/preview/", {"submit": "1"})
+        self.assertEqual(response.status_code, 302)
+
+    def test_result_preview_post_without_session_redirects(self):
+        """Test posting to preview without session redirects."""
+        self.client.force_login(self.staff_user)
+        response = self.client.post("/import/results/preview/", {"submit": "1"})
+        self.assertEqual(response.status_code, 302)
+
+    def test_student_preview_post_without_submit_redirects(self):
+        """Test posting to student preview without submit button redirects."""
+        session = self.client.session
+        session["student_import_preview"] = {"csv_content": "test"}
+        session.save()
+
+        self.client.force_login(self.staff_user)
+        response = self.client.post("/import/students/preview/", {"cancel": "1"})
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("/import/students/upload/", response.url)
+
+    def test_result_preview_post_without_submit_redirects(self):
+        """Test posting to result preview without submit button redirects."""
+        session = self.client.session
+        session["result_import_preview"] = {"csv_content": "test", "filename": "test.csv"}
+        session.save()
+
+        self.client.force_login(self.staff_user)
+        response = self.client.post("/import/results/preview/", {"cancel": "1"})
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("/import/results/upload/", response.url)

@@ -40,15 +40,15 @@ class TokenRequestView(FormView):
 
     def form_valid(self, form):
         student = form.cleaned_data["student"]
-        
+
         # Generate access token (24 hour validity)
         token = StudentAccessToken.generate_for_student(student, validity_hours=24)
-        
+
         # Store token in session to display it once
         self.request.session["token_code"] = token.code
         self.request.session["token_expires"] = token.expires_at.isoformat()
         self.request.session["token_student_id"] = student.id
-        
+
         messages.success(self.request, "Access token generated successfully!")
         return redirect("accounts:token_success")
 
@@ -67,25 +67,27 @@ class TokenSuccessView(TemplateView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        
+
         # Retrieve token from session
         from datetime import datetime
+
         from django.utils import timezone
-        
+
         token_code = self.request.session.get("token_code")
         token_expires_str = self.request.session.get("token_expires")
         import datetime as dt
+
         token_expires = dt.datetime.fromisoformat(token_expires_str)
-        
+
         context["token"] = {
             "code": token_code,
             "expires_at": token_expires,
         }
-        
+
         # Clear token from session after displaying
         del self.request.session["token_code"]
         del self.request.session["token_expires"]
-        
+
         return context
 
 
@@ -97,17 +99,16 @@ class TokenAuthenticateView(FormView):
 
     def form_valid(self, form):
         token = form.cleaned_data["token"]
-        
+
         # Mark token as used
         token.mark_used()
-        
+
         # Store student ID in session for token-based authentication
         self.request.session["token_student_id"] = token.student.id
         self.request.session["token_authenticated"] = True
-        
+
         messages.success(
             self.request,
             f"Welcome, {token.student.display_name or token.student.roll_number}!",
         )
         return redirect("results:student_profile")
-

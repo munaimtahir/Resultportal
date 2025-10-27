@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from django.db import models
 
-from apps.results.models import Exam
 from apps.accounts.models import YearClass
+from apps.results.models import Exam
 
 
 class ExamAggregate(models.Model):
