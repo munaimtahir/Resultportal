@@ -3,6 +3,7 @@ from __future__ import annotations
 import io
 from datetime import date, datetime, timedelta
 from decimal import Decimal
+from unittest.mock import Mock
 
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
@@ -11,6 +12,7 @@ from django.utils import timezone
 
 from apps.accounts.models import Student, StudentAccessToken, YearClass
 
+from .admin import ResultAdmin
 from .importers import ResultCSVImporter
 from .models import Exam, ImportBatch, Result
 
@@ -1306,3 +1308,205 @@ PMC-100,Test Student,A,1,Anatomy,70,20,90,A,2025-01-15"""
         response = self.client.post("/import/results/preview/", {"cancel": "1"})
         self.assertEqual(response.status_code, 302)
         self.assertIn("/import/results/upload/", response.url)
+
+
+class AdminActionsTests(TestCase):
+    """Tests for admin bulk actions."""
+
+    def setUp(self):
+        from django.contrib.admin.sites import AdminSite
+        from django.contrib.auth import get_user_model
+
+        User = get_user_model()
+        self.admin_user = User.objects.create_user(
+            username="admin", email="admin@pmc.edu.pk", is_staff=True, is_superuser=True
+        )
+        self.year_class = YearClass.objects.create(label="1st Year", order=1)
+        self.student = Student.objects.create(
+            year_class=self.year_class,
+            official_email="student@pmc.edu.pk",
+            roll_number="PMC-100",
+        )
+        self.exam = Exam.objects.create(
+            year_class=self.year_class,
+            code="BLOCK-A-2025",
+            title="Block A Exam",
+            kind=Exam.ExamKind.BLOCK,
+            exam_date=date.today(),
+        )
+        self.batch = ImportBatch.objects.create(
+            import_type=ImportBatch.ImportType.RESULTS,
+            is_dry_run=False,
+        )
+
+        self.site = AdminSite()
+        self.result_admin = ResultAdmin(Result, self.site)
+
+    def test_verify_results_action(self):
+        """Test bulk verify action."""
+        from unittest.mock import Mock
+
+        from django.contrib.admin.sites import AdminSite
+        from django.http import HttpRequest
+
+        # Create SUBMITTED results
+        result1 = Result.objects.create(
+            student=self.student,
+            exam=self.exam,
+            import_batch=self.batch,
+            roll_number="PMC-100",
+            name="Test",
+            subject="Anatomy",
+            block="A",
+            year=1,
+            total=Decimal("80"),
+            grade="A",
+            exam_date=date.today(),
+            status=Result.ResultStatus.SUBMITTED,
+        )
+
+        request = HttpRequest()
+        request.user = self.admin_user
+        queryset = Result.objects.filter(id=result1.id)
+
+        # Mock message_user
+        self.result_admin.message_user = Mock()
+
+        self.result_admin.verify_results(request, queryset)
+
+        result1.refresh_from_db()
+        self.assertEqual(result1.status, Result.ResultStatus.VERIFIED)
+
+        result1.refresh_from_db()
+        self.assertEqual(result1.status, Result.ResultStatus.VERIFIED)
+
+    def test_return_results_action(self):
+        """Test bulk return action."""
+        from django.http import HttpRequest
+
+        result1 = Result.objects.create(
+            student=self.student,
+            exam=self.exam,
+            import_batch=self.batch,
+            roll_number="PMC-100",
+            name="Test",
+            subject="Anatomy",
+            block="A",
+            year=1,
+            total=Decimal("80"),
+            grade="A",
+            exam_date=date.today(),
+            status=Result.ResultStatus.SUBMITTED,
+        )
+
+        request = HttpRequest()
+        request.user = self.admin_user
+        queryset = Result.objects.filter(id=result1.id)
+
+        self.result_admin.message_user = Mock()
+
+        self.result_admin.return_results(request, queryset)
+
+        result1.refresh_from_db()
+        self.assertEqual(result1.status, Result.ResultStatus.RETURNED)
+
+    def test_publish_results_action(self):
+        """Test bulk publish action."""
+        from django.http import HttpRequest
+
+        result1 = Result.objects.create(
+            student=self.student,
+            exam=self.exam,
+            import_batch=self.batch,
+            roll_number="PMC-100",
+            name="Test",
+            subject="Anatomy",
+            block="A",
+            year=1,
+            total=Decimal("80"),
+            grade="A",
+            exam_date=date.today(),
+            status=Result.ResultStatus.VERIFIED,
+        )
+
+        request = HttpRequest()
+        request.user = self.admin_user
+        queryset = Result.objects.filter(id=result1.id)
+
+        self.result_admin.message_user = Mock()
+
+        self.result_admin.publish_results(request, queryset)
+
+        result1.refresh_from_db()
+        self.assertEqual(result1.status, Result.ResultStatus.PUBLISHED)
+
+    def test_unpublish_results_action(self):
+        """Test bulk unpublish action."""
+        from django.http import HttpRequest
+        from django.utils import timezone
+
+        result1 = Result.objects.create(
+            student=self.student,
+            exam=self.exam,
+            import_batch=self.batch,
+            roll_number="PMC-100",
+            name="Test",
+            subject="Anatomy",
+            block="A",
+            year=1,
+            total=Decimal("80"),
+            grade="A",
+            exam_date=date.today(),
+            status=Result.ResultStatus.PUBLISHED,
+            published_at=timezone.now(),
+        )
+
+        request = HttpRequest()
+        request.user = self.admin_user
+        queryset = Result.objects.filter(id=result1.id)
+
+        self.result_admin.message_user = Mock()
+
+        self.result_admin.unpublish_results(request, queryset)
+
+        result1.refresh_from_db()
+        self.assertEqual(result1.status, Result.ResultStatus.VERIFIED)
+        self.assertIsNone(result1.published_at)
+
+    def test_export_as_csv_action(self):
+        """Test CSV export action."""
+        from django.http import HttpRequest
+
+        result1 = Result.objects.create(
+            student=self.student,
+            exam=self.exam,
+            import_batch=self.batch,
+            roll_number="PMC-100",
+            name="Test Student",
+            subject="Anatomy",
+            block="A",
+            year=1,
+            theory=Decimal("70"),
+            practical=Decimal("20"),
+            total=Decimal("90"),
+            grade="A",
+            exam_date=date.today(),
+            status=Result.ResultStatus.PUBLISHED,
+        )
+
+        request = HttpRequest()
+        request.user = self.admin_user
+        queryset = Result.objects.filter(id=result1.id)
+
+        self.result_admin.message_user = Mock()
+
+        response = self.result_admin.export_as_csv(request, queryset)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response["Content-Type"], "text/csv")
+        self.assertIn("results_export.csv", response["Content-Disposition"])
+
+        content = response.content.decode("utf-8")
+        self.assertIn("PMC-100", content)
+        self.assertIn("Test Student", content)
+        self.assertIn("Anatomy", content)
