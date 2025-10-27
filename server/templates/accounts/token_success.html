@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Access Token Generated{% endblock %}
+
+{% block content %}
+<div class="container mt-5">
+    <div class="row justify-content-center">
+        <div class="col-md-6">
+            <div class="card border-success">
+                <div class="card-header bg-success text-white">
+                    <h4 class="mb-0"><i class="bi bi-check-circle"></i> Access Token Generated</h4>
+                </div>
+                <div class="card-body">
+                    <div class="alert alert-success">
+                        <strong>Success!</strong> Your access token has been generated.
+                    </div>
+
+                    <div class="card mb-3 bg-light">
+                        <div class="card-body">
+                            <h5>Your Access Token:</h5>
+                            <div class="input-group">
+                                <input type="text" 
+                                       class="form-control font-monospace" 
+                                       id="token-code" 
+                                       value="{{ token.code }}" 
+                                       readonly>
+                                <button class="btn btn-outline-secondary" 
+                                        type="button" 
+                                        onclick="copyToken()">
+                                    <i class="bi bi-clipboard"></i> Copy
+                                </button>
+                            </div>
+                            <small class="text-muted d-block mt-2">
+                                Expires: {{ token.expires_at|date:"Y-m-d H:i" }}
+                            </small>
+                        </div>
+                    </div>
+
+                    <div class="alert alert-warning">
+                        <strong>Important:</strong>
+                        <ul class="mb-0">
+                            <li>This token will only be shown once. Please save it securely.</li>
+                            <li>Use this token to access your results for the next 24 hours.</li>
+                            <li>Do not share this token with anyone.</li>
+                        </ul>
+                    </div>
+
+                    <div class="d-grid gap-2">
+                        <a href="{% url 'accounts:token_authenticate' %}" class="btn btn-primary">
+                            Access My Results
+                        </a>
+                        <a href="{% url 'results:home' %}" class="btn btn-outline-secondary">
+                            Return to Home
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function copyToken() {
+    const tokenInput = document.getElementById('token-code');
+    tokenInput.select();
+    tokenInput.setSelectionRange(0, 99999); // For mobile devices
+    document.execCommand('copy');
+    
+    const btn = event.target.closest('button');
+    const originalHTML = btn.innerHTML;
+    btn.innerHTML = '<i class="bi bi-check"></i> Copied!';
+    setTimeout(() => {
+        btn.innerHTML = originalHTML;
+    }, 2000);
+}
+</script>
+{% endblock %}
