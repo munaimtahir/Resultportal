@@ -2,7 +2,7 @@
 
 from django.db import connection
 from django.http import JsonResponse
-
+import logging
 
 def healthz(request):
     """Health check endpoint for monitoring."""
@@ -15,9 +15,10 @@ def healthz(request):
             "status": "ok",
             "database": "connected"
         })
+        logging.exception("Health check failed")
     except Exception as e:
         return JsonResponse({
             "status": "error",
             "database": "disconnected",
-            "error": str(e)
+            "error": "An internal error occurred."
         }, status=500)
