@@ -126,6 +126,17 @@ class ResultAdmin(admin.ModelAdmin):
 
     def publish_results(self, request, queryset):
         """Bulk publish selected results."""
+        from django.conf import settings
+
+        # Check ALLOW_PUBLISH flag
+        if not getattr(settings, "ALLOW_PUBLISH", True):
+            self.message_user(
+                request,
+                "Publishing is currently disabled by system configuration.",
+                level="error",
+            )
+            return
+
         count = 0
         for result in queryset:
             if result.status in [result.ResultStatus.VERIFIED, result.ResultStatus.DRAFT]:

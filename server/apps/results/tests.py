@@ -1510,3 +1510,229 @@ class AdminActionsTests(TestCase):
         self.assertIn("PMC-100", content)
         self.assertIn("Test Student", content)
         self.assertIn("Anatomy", content)
+
+
+class BackfillCommandTests(TestCase):
+    """Tests for the backfill_result_status management command."""
+
+    def setUp(self):
+        from django.contrib.auth import get_user_model
+
+        User = get_user_model()
+        self.user = User.objects.create_user(username="testuser", email="test@pmc.edu.pk")
+        self.year_class = YearClass.objects.create(label="1st Year", order=1)
+        self.student = Student.objects.create(
+            year_class=self.year_class,
+            official_email="student@pmc.edu.pk",
+            roll_number="PMC-100",
+        )
+        self.exam = Exam.objects.create(
+            year_class=self.year_class,
+            code="TEST-2025",
+            title="Test Exam",
+            kind=Exam.ExamKind.BLOCK,
+            exam_date=date.today(),
+        )
+        self.batch = ImportBatch.objects.create(
+            import_type=ImportBatch.ImportType.RESULTS,
+            is_dry_run=False,
+        )
+
+    def test_backfill_command_dry_run(self):
+        """Test backfill command in dry-run mode."""
+        from io import StringIO
+
+        from django.core.management import call_command
+        from django.utils import timezone
+
+        # Create a result with published_at but DRAFT status
+        Result.objects.create(
+            student=self.student,
+            exam=self.exam,
+            import_batch=self.batch,
+            roll_number="PMC-100",
+            name="Test",
+            subject="Anatomy",
+            block="A",
+            year=1,
+            total=Decimal("80"),
+            grade="A",
+            exam_date=date.today(),
+            status=Result.ResultStatus.DRAFT,
+            published_at=timezone.now(),
+        )
+
+        out = StringIO()
+        call_command("backfill_result_status", "--dry-run", stdout=out)
+        output = out.getvalue()
+
+        self.assertIn("DRY RUN", output)
+        self.assertIn("Would update", output)
+
+        # Verify no actual changes
+        result = Result.objects.get(student=self.student)
+        self.assertEqual(result.status, Result.ResultStatus.DRAFT)
+
+    def test_backfill_command_applies_changes(self):
+        """Test backfill command actually updates results."""
+        from io import StringIO
+
+        from django.core.management import call_command
+        from django.utils import timezone
+
+        # Create a result with published_at but DRAFT status
+        Result.objects.create(
+            student=self.student,
+            exam=self.exam,
+            import_batch=self.batch,
+            roll_number="PMC-100",
+            name="Test",
+            subject="Anatomy",
+            block="A",
+            year=1,
+            total=Decimal("80"),
+            grade="A",
+            exam_date=date.today(),
+            status=Result.ResultStatus.DRAFT,
+            published_at=timezone.now(),
+        )
+
+        out = StringIO()
+        call_command("backfill_result_status", stdout=out)
+        output = out.getvalue()
+
+        self.assertIn("Successfully updated", output)
+
+        # Verify changes applied
+        result = Result.objects.get(student=self.student)
+        self.assertEqual(result.status, Result.ResultStatus.PUBLISHED)
+
+    def test_backfill_command_no_changes_needed(self):
+        """Test backfill command when no results need updating."""
+        from io import StringIO
+
+        from django.core.management import call_command
+
+        # Create a result that's already correct
+        Result.objects.create(
+            student=self.student,
+            exam=self.exam,
+            import_batch=self.batch,
+            roll_number="PMC-100",
+            name="Test",
+            subject="Anatomy",
+            block="A",
+            year=1,
+            total=Decimal("80"),
+            grade="A",
+            exam_date=date.today(),
+            status=Result.ResultStatus.PUBLISHED,
+            published_at=timezone.now(),
+        )
+
+        out = StringIO()
+        call_command("backfill_result_status", stdout=out)
+        output = out.getvalue()
+
+        self.assertIn("No results need to be backfilled", output)
+
+
+class AllowPublishFlagTests(TestCase):
+    """Tests for ALLOW_PUBLISH feature flag."""
+
+    def setUp(self):
+        from django.contrib.admin.sites import AdminSite
+        from django.contrib.auth import get_user_model
+
+        User = get_user_model()
+        self.admin_user = User.objects.create_user(
+            username="admin", email="admin@pmc.edu.pk", is_staff=True
+        )
+        self.year_class = YearClass.objects.create(label="1st Year", order=1)
+        self.student = Student.objects.create(
+            year_class=self.year_class,
+            official_email="student@pmc.edu.pk",
+            roll_number="PMC-100",
+        )
+        self.exam = Exam.objects.create(
+            year_class=self.year_class,
+            code="TEST-2025",
+            title="Test Exam",
+            kind=Exam.ExamKind.BLOCK,
+            exam_date=date.today(),
+        )
+        self.batch = ImportBatch.objects.create(
+            import_type=ImportBatch.ImportType.RESULTS,
+            is_dry_run=False,
+        )
+        self.site = AdminSite()
+        self.result_admin = ResultAdmin(Result, self.site)
+
+    def test_publish_blocked_when_flag_disabled(self):
+        """Test that publishing is blocked when ALLOW_PUBLISH=False."""
+        from django.http import HttpRequest
+
+        result = Result.objects.create(
+            student=self.student,
+            exam=self.exam,
+            import_batch=self.batch,
+            roll_number="PMC-100",
+            name="Test",
+            subject="Anatomy",
+            block="A",
+            year=1,
+            total=Decimal("80"),
+            grade="A",
+            exam_date=date.today(),
+            status=Result.ResultStatus.VERIFIED,
+        )
+
+        request = HttpRequest()
+        request.user = self.admin_user
+        queryset = Result.objects.filter(id=result.id)
+
+        self.result_admin.message_user = Mock()
+
+        with self.settings(ALLOW_PUBLISH=False):
+            self.result_admin.publish_results(request, queryset)
+
+        # Verify result was NOT published
+        result.refresh_from_db()
+        self.assertEqual(result.status, Result.ResultStatus.VERIFIED)
+
+        # Verify error message was shown
+        self.result_admin.message_user.assert_called_once()
+        call_args = self.result_admin.message_user.call_args
+        self.assertIn("disabled", str(call_args))
+
+    def test_publish_allowed_when_flag_enabled(self):
+        """Test that publishing works when ALLOW_PUBLISH=True."""
+        from django.http import HttpRequest
+
+        result = Result.objects.create(
+            student=self.student,
+            exam=self.exam,
+            import_batch=self.batch,
+            roll_number="PMC-100",
+            name="Test",
+            subject="Anatomy",
+            block="A",
+            year=1,
+            total=Decimal("80"),
+            grade="A",
+            exam_date=date.today(),
+            status=Result.ResultStatus.VERIFIED,
+        )
+
+        request = HttpRequest()
+        request.user = self.admin_user
+        queryset = Result.objects.filter(id=result.id)
+
+        self.result_admin.message_user = Mock()
+
+        with self.settings(ALLOW_PUBLISH=True):
+            self.result_admin.publish_results(request, queryset)
+
+        # Verify result WAS published
+        result.refresh_from_db()
+        self.assertEqual(result.status, Result.ResultStatus.PUBLISHED)
