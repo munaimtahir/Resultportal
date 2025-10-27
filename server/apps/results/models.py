@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 from decimal import Decimal
 
 from django.conf import settings
@@ -26,7 +27,7 @@ class Exam(models.Model):
         help_text="Year/class this exam is for",
     )
     code = models.CharField(
-        max_length=50, unique=True, help_text="Unique exam code (e.g., 'BLOCK-E-2024')"
+        max_length=50, unique=True, help_text="Unique exam code (e.g., 'BLOCK-A-2025')"
     )
     title = models.CharField(max_length=200, help_text="Full exam title")
     kind = models.CharField(
@@ -57,7 +58,6 @@ class Exam(models.Model):
         return f"{self.code} - {self.title}"
 
     def is_recheck_open(self) -> bool:
-        """Check if recheck window is currently open."""
         if not self.recheck_deadline:
             return False
         return timezone.now() < self.recheck_deadline
@@ -92,47 +92,16 @@ class ImportBatch(models.Model):
         blank=True,
         help_text="Original filename uploaded by the operator.",
     )
-    csv_filename = models.CharField(
-        max_length=255,
-        blank=True,
-        help_text="CSV filename for reference",
-    )
-    notes = models.TextField(
-        blank=True,
-        help_text="Optional operator notes or contextual metadata.",
-    )
-    is_dry_run = models.BooleanField(
-        default=True,
-        help_text="Marks whether this batch represents a dry-run preview.",
-    )
-    row_count = models.PositiveIntegerField(
-        default=0,
-        help_text="Total rows processed in the import payload.",
-    )
-    created_rows = models.PositiveIntegerField(
-        default=0,
-        help_text="Number of records that would be newly created.",
-    )
-    updated_rows = models.PositiveIntegerField(
-        default=0,
-        help_text="Number of records that would be updated.",
-    )
-    skipped_rows = models.PositiveIntegerField(
-        default=0,
-        help_text="Rows skipped due to validation errors.",
-    )
-    errors_json = models.JSONField(
-        default=list, blank=True, help_text="List of error messages from validation"
-    )
-    warnings_json = models.JSONField(
-        default=list, blank=True, help_text="List of warning messages from validation"
-    )
+    notes = models.TextField(blank=True, help_text="Optional operator notes or metadata.")
+    is_dry_run = models.BooleanField(default=True, help_text="True if this is a dry-run preview.")
+    row_count = models.PositiveIntegerField(default=0)
+    created_rows = models.PositiveIntegerField(default=0)
+    updated_rows = models.PositiveIntegerField(default=0)
+    skipped_rows = models.PositiveIntegerField(default=0)
+    errors_json = models.JSONField(default=list, blank=True, help_text="Validation errors")
+    warnings_json = models.JSONField(default=list, blank=True, help_text="Validation warnings")
     created_at = models.DateTimeField(auto_now_add=True)
-    completed_at = models.DateTimeField(
-        null=True,
-        blank=True,
-        help_text="Timestamp when the import was finalised (if applicable).",
-    )
+    completed_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         ordering = ("-created_at", "-id")
@@ -141,8 +110,6 @@ class ImportBatch(models.Model):
         return f"{self.get_import_type_display()} import @ {self.created_at:%Y-%m-%d %H:%M:%S}"
 
     def mark_completed(self) -> None:
-        """Mark the batch as executed, stamping the completion time."""
-
         if not self.completed_at:
             self.completed_at = timezone.now()
             self.is_dry_run = False
@@ -151,6 +118,7 @@ class ImportBatch(models.Model):
 
 class ResultQuerySet(models.QuerySet):
     def published(self) -> "ResultQuerySet":
+        # Source of truth = workflow status; published_at is kept for compatibility/ordering.
         return self.filter(status=Result.ResultStatus.PUBLISHED)
 
     def by_status(self, status: str) -> "ResultQuerySet":
@@ -187,39 +155,18 @@ class Result(models.Model):
         help_text="Import batch that created or last updated this record.",
     )
     respondent_id = models.CharField(max_length=64, blank=True)
-    roll_number = models.CharField(
-        max_length=32,
-        db_index=True,
-        help_text=(
-            "Roll number as it appears in the import data, "
-            "should match the student's roll number."
-        ),
-    )
+    roll_number = models.CharField(max_length=32, db_index=True)
     name = models.CharField(max_length=255)
     block = models.CharField(max_length=32)
     year = models.PositiveIntegerField()
     subject = models.CharField(max_length=128)
 
-    # Marks fields - now mapped to theory/practical/total
-    theory = models.DecimalField(
-        max_digits=6,
-        decimal_places=2,
-        null=True,
-        blank=True,
-        help_text="Theory/written component marks",
-    )
-    practical = models.DecimalField(
-        max_digits=6,
-        decimal_places=2,
-        null=True,
-        blank=True,
-        help_text="Practical/viva component marks",
-    )
-    total = models.DecimalField(
-        max_digits=6, decimal_places=2, null=True, blank=True, help_text="Total marks"
-    )
+    # New canonical marks fields (with legacy compatibility)
+    theory = models.DecimalField(max_digits=6, decimal_places=2, null=True, blank=True)
+    practical = models.DecimalField(max_digits=6, decimal_places=2, null=True, blank=True)
+    total = models.DecimalField(max_digits=6, decimal_places=2, null=True, blank=True)
 
-    # Keep old field names for backward compatibility
+    # Legacy fields retained for BC
     written_marks = models.DecimalField(max_digits=6, decimal_places=2, null=True, blank=True)
     viva_marks = models.DecimalField(max_digits=6, decimal_places=2, null=True, blank=True)
     total_marks = models.DecimalField(max_digits=6, decimal_places=2, null=True, blank=True)
@@ -227,16 +174,13 @@ class Result(models.Model):
     grade = models.CharField(max_length=32)
     exam_date = models.DateField()
 
-    # Workflow status fields
     status = models.CharField(
         max_length=20,
         choices=ResultStatus.choices,
         default=ResultStatus.DRAFT,
         help_text="Current workflow status",
     )
-    status_log = models.JSONField(
-        default=list, blank=True, help_text="Audit trail of status changes"
-    )
+    status_log = models.JSONField(default=list, blank=True, help_text="Audit trail of status changes")
     verified_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,
@@ -246,7 +190,10 @@ class Result(models.Model):
         help_text="Admin who verified this result",
     )
     verified_at = models.DateTimeField(null=True, blank=True, help_text="When result was verified")
+
+    # Keep published_at for ordering/back-compat; status=PUBLISHED is the gate.
     published_at = models.DateTimeField(null=True, blank=True)
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -268,10 +215,12 @@ class Result(models.Model):
     def is_published(self) -> bool:
         return self.status == self.ResultStatus.PUBLISHED
 
+    # ---------- Validation & sync ----------
+
     def clean(self) -> None:
         errors: dict[str, list[str]] = {}
 
-        # Sync old fields to new if they're set and new fields aren't
+        # If legacy fields are set and new fields not explicitly set, mirror into new fields
         if self.written_marks is not None and not hasattr(self, "_theory_set"):
             self.theory = self.written_marks
         if self.viva_marks is not None and not hasattr(self, "_practical_set"):
@@ -279,50 +228,50 @@ class Result(models.Model):
         if self.total_marks is not None and not hasattr(self, "_total_set"):
             self.total = self.total_marks
 
-        # Validate marks are non-negative
-        for field in ("theory", "practical", "total", "written_marks", "viva_marks", "total_marks"):
-            value = getattr(self, field, None)
-            if value is not None and value < 0:
+        # Non-negative checks on legacy marks
+        for field in ("written_marks", "viva_marks", "total_marks"):
+            value = getattr(self, field)
+            if value is None:
+                continue
+            if value < 0:
                 errors.setdefault(field, []).append("Marks cannot be negative.")
 
-        # Check total = theory + practical (if all are set)
+        # New-field consistency: total == theory + practical (when all present)
         if self.theory is not None and self.practical is not None and self.total is not None:
             expected = (Decimal(self.theory) + Decimal(self.practical)).quantize(Decimal("0.01"))
             total = Decimal(self.total).quantize(Decimal("0.01"))
             if expected != total:
                 errors.setdefault("total", []).append(
-                    "Total marks must equal theory plus practical marks.",
+                    "Total marks must equal theory plus practical marks."
                 )
 
-        # Backward compatibility check (only if new fields not set)
+        # Legacy-field consistency (for BC)
         if (
-            self.theory is None
-            and self.written_marks is not None
+            self.written_marks is not None
             and self.viva_marks is not None
             and self.total_marks is not None
         ):
-            expected = (Decimal(self.written_marks) + Decimal(self.viva_marks)).quantize(
+            expected_legacy = (Decimal(self.written_marks) + Decimal(self.viva_marks)).quantize(
                 Decimal("0.01")
             )
-            total = Decimal(self.total_marks).quantize(Decimal("0.01"))
-            if expected != total:
+            total_legacy = Decimal(self.total_marks).quantize(Decimal("0.01"))
+            if expected_legacy != total_legacy:
                 errors.setdefault("total_marks", []).append(
-                    "Total marks must equal written plus viva marks.",
+                    "Total marks must equal written plus viva marks."
                 )
 
+        # Roll-number integrity
         if self.student and self.student.roll_number and self.roll_number:
             if self.student.roll_number.lower() != self.roll_number.lower():
                 errors.setdefault("roll_number", []).append(
-                    _("Roll number does not match the linked student record."),
+                    _("Roll number does not match the linked student record.")
                 )
 
         if errors:
             raise ValidationError(errors)
 
     def save(self, *args, **kwargs):
-        # Sync fields bidirectionally
-        # Priority: use written_marks/viva_marks/total_marks
-        # if theory/practical/total not explicitly set
+        # Bidirectional sync between new and legacy fields
         if self.theory is not None:
             self.written_marks = self.theory
         elif self.written_marks is not None:
@@ -341,60 +290,70 @@ class Result(models.Model):
         self.full_clean()
         return super().save(*args, **kwargs)
 
+    # ---------- Workflow helpers (+ audit log) ----------
+
     def _log_status_change(self, old_status: str, new_status: str, user=None) -> None:
-        """Add status change to audit log."""
-        log_entry = {
+        entry = {
             "timestamp": timezone.now().isoformat(),
             "from_status": old_status,
             "to_status": new_status,
-            "user": user.username if user else None,
+            "user": getattr(user, "username", None),
         }
         if not isinstance(self.status_log, list):
             self.status_log = []
-        self.status_log.append(log_entry)
+        self.status_log.append(entry)
 
     def submit(self, user=None) -> None:
-        """Transition from DRAFT to SUBMITTED."""
         if self.status == self.ResultStatus.DRAFT:
-            old_status = self.status
+            old = self.status
             self.status = self.ResultStatus.SUBMITTED
-            self._log_status_change(old_status, self.status, user)
+            self._log_status_change(old, self.status, user)
             self.save(update_fields=["status", "status_log", "updated_at"])
 
     def return_for_correction(self, user=None) -> None:
-        """Transition from SUBMITTED to RETURNED."""
         if self.status == self.ResultStatus.SUBMITTED:
-            old_status = self.status
+            old = self.status
             self.status = self.ResultStatus.RETURNED
-            self._log_status_change(old_status, self.status, user)
+            self._log_status_change(old, self.status, user)
             self.save(update_fields=["status", "status_log", "updated_at"])
 
     def verify(self, user) -> None:
-        """Transition from SUBMITTED to VERIFIED."""
         if self.status == self.ResultStatus.SUBMITTED:
-            old_status = self.status
+            old = self.status
             self.status = self.ResultStatus.VERIFIED
             self.verified_by = user
             self.verified_at = timezone.now()
-            self._log_status_change(old_status, self.status, user)
+            self._log_status_change(old, self.status, user)
             self.save(
                 update_fields=["status", "verified_by", "verified_at", "status_log", "updated_at"]
             )
 
     def publish(self, user=None) -> None:
-        """Mark this result as published, making it visible to students."""
+        """Transition VERIFIED → PUBLISHED and set published_at."""
         if self.status == self.ResultStatus.VERIFIED:
-            old_status = self.status
+            old = self.status
             self.status = self.ResultStatus.PUBLISHED
             self.published_at = timezone.now()
-            self._log_status_change(old_status, self.status, user)
+            self._log_status_change(old, self.status, user)
             self.save(update_fields=["status", "published_at", "status_log", "updated_at"])
 
     def unpublish(self, user=None) -> None:
-        """Mark this result as unpublished, hiding it from students."""
+        """Transition PUBLISHED → VERIFIED (hide from students)."""
         if self.status == self.ResultStatus.PUBLISHED:
-            old_status = self.status
+            old = self.status
             self.status = self.ResultStatus.VERIFIED
             self.published_at = None
-            self._log_status_change(old_status, self.status, user)
+            self._log_status_change(old, self.status, user)
             self.save(update_fields=["status", "published_at", "status_log", "updated_at"])
+
+    # Utility used by importers when they map legacy columns
+    def sync_marks_with_flags(self) -> None:
+        if self.written_marks is not None:
+            self.theory = self.written_marks
+            self._theory_set = True
+        if self.viva_marks is not None:
+            self.practical = self.viva_marks
+            self._practical_set = True
+        if self.total_marks is not None:
+            self.total = self.total_marks
+            self._total_set = True
