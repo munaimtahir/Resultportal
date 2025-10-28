@@ -1346,7 +1346,6 @@ class AdminActionsTests(TestCase):
         """Test bulk verify action."""
         from unittest.mock import Mock
 
-        from django.contrib.admin.sites import AdminSite
         from django.http import HttpRequest
 
         # Create SUBMITTED results

@@ -70,7 +70,6 @@ class FeatureFlagsTests(TestCase):
 
     def test_results_only_middleware_blocks_unallowed_paths(self):
         """Test that FEATURE_RESULTS_ONLY blocks non-allowed paths."""
-        from django.conf import settings
         from django.http import HttpRequest, HttpResponse
 
         from config.middleware import ResultsOnlyMiddleware
