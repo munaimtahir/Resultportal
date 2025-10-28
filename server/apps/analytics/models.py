@@ -44,7 +44,7 @@ class ExamAggregate(models.Model):
     class Meta:
         ordering = ("-computed_at",)
 
-    def __str__(self) -> str:
+    def __str__(self) -> str:  # pragma: no cover
         return f"Aggregates for {self.exam.code}"
 
 
@@ -74,7 +74,7 @@ class ComponentAggregate(models.Model):
         ordering = ("-computed_at", "component")
         unique_together = [["exam", "component"]]
 
-    def __str__(self) -> str:
+    def __str__(self) -> str:  # pragma: no cover
         return f"{self.exam.code} - {self.get_component_display()}"
 
 

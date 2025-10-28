@@ -299,7 +299,7 @@ class Result(models.Model):
             "to_status": new_status,
             "user": getattr(user, "username", None),
         }
-        if not isinstance(self.status_log, list):
+        if not isinstance(self.status_log, list):  # pragma: no cover - defensive
             self.status_log = []
         self.status_log.append(entry)
 

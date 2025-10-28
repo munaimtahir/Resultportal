@@ -16,8 +16,8 @@ class Migration(migrations.Migration):
     operations = [
         migrations.AddField(
             model_name='importbatch',
-            name='csv_filename',
-            field=models.CharField(blank=True, help_text='CSV filename for reference', max_length=255),
+            name='source_filename',
+            field=models.CharField(blank=True, help_text='Original filename uploaded by the operator.', max_length=255),
         ),
         migrations.AddField(
             model_name='importbatch',
