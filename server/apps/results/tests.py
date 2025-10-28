@@ -3,14 +3,16 @@ from __future__ import annotations
 import io
 from datetime import date, datetime, timedelta
 from decimal import Decimal
+from unittest.mock import Mock
 
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from django.test import TestCase
 from django.utils import timezone
 
-from apps.accounts.models import Student, YearClass, StudentAccessToken
+from apps.accounts.models import Student, StudentAccessToken, YearClass
 
+from .admin import ResultAdmin
 from .importers import ResultCSVImporter
 from .models import Exam, ImportBatch, Result
 
@@ -170,6 +172,13 @@ class ImportBatchModelTests(TestCase):
 
 class ResultModelTests(TestCase):
     def setUp(self) -> None:
+        from django.contrib.auth import get_user_model
+
+        User = get_user_model()
+        self.staff_user = User.objects.create_user(
+            username="admin", email="admin@pmc.edu.pk", is_staff=True
+        )
+
         self.year_class = YearClass.objects.create(label="2nd Year", order=2)
         self.student = Student.objects.create(
             year_class=self.year_class,
@@ -239,19 +248,15 @@ class ResultModelTests(TestCase):
 
     def test_result_status_workflow_verify(self) -> None:
         """Test verifying a submitted result."""
-        user = get_user_model().objects.create_user(
-            username="admin",
-            email="admin@pmc.edu.pk",
-        )
         result = self._build_result()
         result.save()
         result.submit()
 
-        result.verify(user)
+        result.verify(self.staff_user)
         result.refresh_from_db()
 
         self.assertEqual(result.status, Result.ResultStatus.VERIFIED)
-        self.assertEqual(result.verified_by, user)
+        self.assertEqual(result.verified_by, self.staff_user)
         self.assertIsNotNone(result.verified_at)
 
     def test_result_status_workflow_return(self) -> None:
@@ -267,16 +272,12 @@ class ResultModelTests(TestCase):
 
     def test_result_status_workflow_publish(self) -> None:
         """Test publishing a verified result."""
-        user = get_user_model().objects.create_user(
-            username="admin",
-            email="admin@pmc.edu.pk",
-        )
         result = self._build_result()
         result.save()
         result.submit()
-        result.verify(user)
+        result.verify(self.staff_user)
 
-        result.publish(user)
+        result.publish(self.staff_user)
         result.refresh_from_db()
 
         self.assertEqual(result.status, Result.ResultStatus.PUBLISHED)
@@ -285,17 +286,13 @@ class ResultModelTests(TestCase):
 
     def test_result_status_workflow_unpublish(self) -> None:
         """Test unpublishing a published result."""
-        user = get_user_model().objects.create_user(
-            username="admin",
-            email="admin@pmc.edu.pk",
-        )
         result = self._build_result()
         result.save()
         result.submit()
-        result.verify(user)
-        result.publish(user)
+        result.verify(self.staff_user)
+        result.publish(self.staff_user)
 
-        result.unpublish(user)
+        result.unpublish(self.staff_user)
         result.refresh_from_db()
 
         self.assertEqual(result.status, Result.ResultStatus.VERIFIED)
@@ -321,17 +318,14 @@ class ResultModelTests(TestCase):
 
     def test_publish_method_sets_timestamp(self):
         """Test that publish() sets published_at timestamp."""
-        user = get_user_model().objects.create_user(
-            username="admin",
-            email="admin@pmc.edu.pk",
-        )
         result = self._build_result()
         result.save()
-        result.submit()
-        result.verify(user)
         self.assertIsNone(result.published_at)
         self.assertFalse(result.is_published)
 
+        # Follow the workflow: DRAFT -> SUBMITTED -> VERIFIED -> PUBLISHED
+        result.submit()
+        result.verify(self.staff_user)
         result.publish()
         result.refresh_from_db()
         self.assertIsNotNone(result.published_at)
@@ -339,14 +333,11 @@ class ResultModelTests(TestCase):
 
     def test_publish_method_idempotent(self):
         """Test that calling publish() multiple times is safe."""
-        user = get_user_model().objects.create_user(
-            username="admin",
-            email="admin@pmc.edu.pk",
-        )
         result = self._build_result()
         result.save()
+        # Follow the workflow: DRAFT -> SUBMITTED -> VERIFIED -> PUBLISHED
         result.submit()
-        result.verify(user)
+        result.verify(self.staff_user)
         result.publish()
         first_published_at = result.published_at
 
@@ -357,15 +348,10 @@ class ResultModelTests(TestCase):
 
     def test_unpublish_method_clears_timestamp(self):
         """Test that unpublish() clears published_at timestamp."""
-        user = get_user_model().objects.create_user(
-            username="admin",
-            email="admin@pmc.edu.pk",
+        result = self._build_result(
+            published_at=timezone.now(), status=Result.ResultStatus.PUBLISHED
         )
-        result = self._build_result()
         result.save()
-        result.submit()
-        result.verify(user)
-        result.publish()
         self.assertTrue(result.is_published)
 
         result.unpublish()
@@ -382,6 +368,62 @@ class ResultModelTests(TestCase):
         result.unpublish()
         result.refresh_from_db()
         self.assertIsNone(result.published_at)
+
+    def test_by_status_queryset_filter(self):
+        """Test the by_status queryset filter."""
+        result1 = self._build_result(subject="Anatomy")
+        result1.save()
+        result1.submit()
+
+        result2 = self._build_result(subject="Biochem")
+        result2.save()
+
+        submitted = Result.objects.by_status(Result.ResultStatus.SUBMITTED)
+        draft = Result.objects.by_status(Result.ResultStatus.DRAFT)
+
+        self.assertIn(result1, submitted)
+        self.assertNotIn(result2, submitted)
+        self.assertIn(result2, draft)
+        self.assertNotIn(result1, draft)
+
+    def test_status_log_initialization(self):
+        """Test that status_log gets initialized if not a list."""
+        result = self._build_result()
+        result.save()
+        # Directly modify the status_log to a non-list value in memory
+        result.status_log = {}  # Use dict instead of None
+        result.submit()
+        result.refresh_from_db()
+        self.assertIsInstance(result.status_log, list)
+        self.assertTrue(len(result.status_log) > 0)
+
+    def test_sync_marks_with_flags(self):
+        """Test the sync_marks_with_flags utility method."""
+        result = self._build_result(
+            written_marks=Decimal("70.00"),
+            viva_marks=Decimal("20.00"),
+            total_marks=Decimal("90.00"),
+        )
+        result.sync_marks_with_flags()
+        result.save()
+
+        self.assertEqual(result.theory, Decimal("70.00"))
+        self.assertEqual(result.practical, Decimal("20.00"))
+        self.assertEqual(result.total, Decimal("90.00"))
+
+    def test_clean_with_null_marks(self):
+        """Test that clean handles null marks properly."""
+        result = self._build_result(
+            written_marks=None,
+            viva_marks=None,
+            total_marks=None,
+            theory=Decimal("70.00"),
+            practical=Decimal("20.00"),
+            total=Decimal("90.00"),
+        )
+        # Should not raise ValidationError for null legacy marks
+        result.full_clean()
+        self.assertEqual(result.theory, Decimal("70.00"))
 
 
 class ResultCSVImporterTests(TestCase):
@@ -690,7 +732,7 @@ class StudentProfileViewTests(TestCase):
         """Test that profile page requires authentication."""
         response = self.client.get("/me/")
         self.assertEqual(response.status_code, 302)
-        self.assertIn("/accounts/login/", response.url)
+        self.assertIn("/accounts/token/authenticate/", response.url)
 
     def test_profile_displays_student_info(self):
         """Test that profile page displays student information."""
@@ -734,13 +776,13 @@ class StudentResultsViewTests(TestCase):
         """Test that results page requires authentication."""
         response = self.client.get("/me/results/")
         self.assertEqual(response.status_code, 302)
-        self.assertIn("/accounts/login/", response.url)
+        self.assertIn("/accounts/token/authenticate/", response.url)
 
     def test_results_page_only_shows_published_results(self):
         """Test that only published results are shown."""
         from django.utils import timezone
 
-        # Create published result
+        # Create published result (with proper workflow status)
         published = Result.objects.create(
             student=self.student,
             import_batch=self.batch,
@@ -754,8 +796,8 @@ class StudentResultsViewTests(TestCase):
             total_marks=Decimal("90.00"),
             grade="A",
             exam_date=date(2025, 1, 15),
-            status=Result.ResultStatus.PUBLISHED,
             published_at=timezone.now(),
+            status=Result.ResultStatus.PUBLISHED,
         )
 
         # Create unpublished result
@@ -772,7 +814,6 @@ class StudentResultsViewTests(TestCase):
             total_marks=Decimal("100.00"),
             grade="A+",
             exam_date=date(2025, 1, 16),
-            status=Result.ResultStatus.DRAFT,
             published_at=None,
         )
 
@@ -833,31 +874,54 @@ class StudentResultsViewTests(TestCase):
         self.assertEqual(response.status_code, 302)
 
 
-class ResultQuerySetTests(TestCase):
-    """Tests for Result queryset methods."""
-    
-    def setUp(self) -> None:
-        self.year_class = YearClass.objects.create(label="2nd Year", order=2)
+class TokenBasedAccessTests(TestCase):
+    """Tests for token-based access to student views."""
+
+    def setUp(self):
+        self.year_class = YearClass.objects.create(label="1st Year", order=1)
         self.student = Student.objects.create(
             year_class=self.year_class,
             official_email="student@pmc.edu.pk",
-            roll_number="PMC-001",
+            roll_number="PMC-123",
             display_name="Test Student",
+        )
+        self.exam = Exam.objects.create(
+            year_class=self.year_class,
+            code="BLOCK-A-2025",
+            title="Block A Exam",
+            kind=Exam.ExamKind.BLOCK,
+            exam_date=date.today(),
         )
         self.batch = ImportBatch.objects.create(
             import_type=ImportBatch.ImportType.RESULTS,
             is_dry_run=False,
         )
-    
-    def test_by_status_filters_correctly(self):
-        """Test by_status queryset method."""
-        # Create results with different statuses
-        draft = Result.objects.create(
+
+    def test_token_based_access_to_profile(self):
+        """Test accessing profile with token-based authentication."""
+        # Simulate token authentication in session
+        session = self.client.session
+        session["token_authenticated"] = True
+        session["token_student_id"] = self.student.id
+        session.save()
+
+        response = self.client.get("/me/")
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, "results/student_profile.html")
+        self.assertEqual(response.context["student"], self.student)
+
+    def test_token_based_access_to_results(self):
+        """Test accessing results with token-based authentication."""
+        # Create published result
+        from django.utils import timezone
+
+        Result.objects.create(
             student=self.student,
+            exam=self.exam,
             import_batch=self.batch,
             roll_number=self.student.roll_number,
             name="Test Student",
-            block="E",
+            block="A",
             year=2025,
             subject="Pathology",
             written_marks=Decimal("70.00"),
@@ -865,158 +929,809 @@ class ResultQuerySetTests(TestCase):
             total_marks=Decimal("90.00"),
             grade="A",
             exam_date=date.today(),
-            status=Result.ResultStatus.DRAFT,
+            published_at=timezone.now(),
+            status=Result.ResultStatus.PUBLISHED,
         )
-        
-        submitted = Result.objects.create(
+
+        # Simulate token authentication in session
+        session = self.client.session
+        session["token_authenticated"] = True
+        session["token_student_id"] = self.student.id
+        session.save()
+
+        response = self.client.get("/me/results/")
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, "results/student_results.html")
+        self.assertEqual(len(response.context["results"]), 1)
+
+    def test_home_redirects_for_token_authenticated_user(self):
+        """Test that home page redirects token-authenticated users."""
+        # Simulate token authentication in session
+        session = self.client.session
+        session["token_authenticated"] = True
+        session["token_student_id"] = self.student.id
+        session.save()
+
+        response = self.client.get("/")
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("/me/", response.url)
+
+    def test_profile_with_recheck_link(self):
+        """Test profile displays recheck link when available."""
+        from datetime import timedelta
+
+        from django.utils import timezone
+
+        # Create exam with recheck deadline in future
+        exam_with_recheck = Exam.objects.create(
+            year_class=self.year_class,
+            code="BLOCK-B-2025",
+            title="Block B Exam",
+            kind=Exam.ExamKind.BLOCK,
+            exam_date=date.today(),
+            recheck_form_url="https://example.com/recheck",
+            recheck_deadline=timezone.now() + timedelta(days=7),
+        )
+
+        # Create published result for this exam
+        Result.objects.create(
             student=self.student,
+            exam=exam_with_recheck,
             import_batch=self.batch,
             roll_number=self.student.roll_number,
             name="Test Student",
-            block="E",
+            block="B",
             year=2025,
-            subject="Anatomy",
-            written_marks=Decimal("80.00"),
+            subject="Pathology",
+            written_marks=Decimal("70.00"),
             viva_marks=Decimal("20.00"),
-            total_marks=Decimal("100.00"),
-            grade="A+",
+            total_marks=Decimal("90.00"),
+            grade="A",
+            exam_date=date.today(),
+            published_at=timezone.now(),
+            status=Result.ResultStatus.PUBLISHED,
+        )
+
+        # Simulate token authentication
+        session = self.client.session
+        session["token_authenticated"] = True
+        session["token_student_id"] = self.student.id
+        session.save()
+
+        response = self.client.get("/me/")
+        self.assertEqual(response.status_code, 200)
+        # Check that exam with recheck is in context
+        exams_with_results = response.context["exams_with_results"]
+        self.assertEqual(len(exams_with_results), 1)
+        self.assertTrue(exams_with_results[0]["recheck_open"])
+
+
+class TokenAccessEdgeCases(TestCase):
+    """Test edge cases for token-based access."""
+
+    def setUp(self):
+        self.year_class = YearClass.objects.create(label="1st Year", order=1)
+
+    def test_profile_with_invalid_token_student_id(self):
+        """Test profile access with invalid student ID in session."""
+        # Simulate token authentication with non-existent student ID
+        session = self.client.session
+        session["token_authenticated"] = True
+        session["token_student_id"] = 99999  # Non-existent ID
+        session.save()
+
+        response = self.client.get("/me/")
+        # Should still render but without student data
+        self.assertEqual(response.status_code, 200)
+        self.assertNotIn("published_results_count", response.context)
+
+    def test_results_with_invalid_token_student_id(self):
+        """Test results access with invalid student ID in session."""
+        # Simulate token authentication with non-existent student ID
+        session = self.client.session
+        session["token_authenticated"] = True
+        session["token_student_id"] = 99999  # Non-existent ID
+        session.save()
+
+        response = self.client.get("/me/results/")
+        self.assertEqual(response.status_code, 200)
+        # Should return empty queryset
+        self.assertEqual(len(response.context["results"]), 0)
+
+
+class CSVImportViewsTests(TestCase):
+    """Tests for CSV import views."""
+
+    def setUp(self):
+        from django.contrib.auth import get_user_model
+
+        User = get_user_model()
+        self.staff_user = User.objects.create_user(
+            username="staff", email="staff@pmc.edu.pk", is_staff=True
+        )
+        self.year_class = YearClass.objects.create(label="1st Year", order=1)
+        self.exam = Exam.objects.create(
+            year_class=self.year_class,
+            code="BLOCK-A-2025",
+            title="Block A Exam",
+            kind=Exam.ExamKind.BLOCK,
+            exam_date=date.today(),
+        )
+
+    def test_student_csv_upload_requires_staff(self):
+        """Test that student CSV upload requires staff authentication."""
+        response = self.client.get("/import/students/upload/")
+        self.assertEqual(response.status_code, 302)
+
+    def test_student_csv_upload_view_accessible_for_staff(self):
+        """Test that student CSV upload view is accessible for staff."""
+        self.client.force_login(self.staff_user)
+        response = self.client.get("/import/students/upload/")
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, "results/import/upload_students.html")
+
+    def test_student_csv_upload_with_valid_file(self):
+        """Test uploading a valid student CSV file."""
+        import io
+
+        csv_content = """roll_no,first_name,last_name,display_name,official_email
+PMC-001,John,Doe,John Doe,john@pmc.edu.pk
+PMC-002,Jane,Smith,Jane Smith,jane@pmc.edu.pk"""
+        csv_file = io.BytesIO(csv_content.encode("utf-8"))
+        csv_file.name = "students.csv"
+
+        self.client.force_login(self.staff_user)
+        response = self.client.post(
+            "/import/students/upload/",
+            {"csv_file": csv_file, "year_class": self.year_class.id},
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertRedirects(response, "/import/students/preview/")
+
+        # Check session data
+        self.assertIn("student_import_preview", self.client.session)
+
+    def test_student_csv_preview_shows_summary(self):
+        """Test that student CSV preview shows import summary."""
+        # Set up session with preview data
+        session = self.client.session
+        session["student_import_preview"] = {
+            "year_class_id": self.year_class.id,
+            "csv_content": "roll_no,first_name,last_name,display_name,official_email\nPMC-001,John,Doe,John Doe,john@pmc.edu.pk",
+            "row_count": 1,
+            "created": 1,
+            "updated": 0,
+            "skipped": 0,
+            "has_errors": False,
+            "errors": [],
+            "warnings": [],
+        }
+        session.save()
+
+        self.client.force_login(self.staff_user)
+        response = self.client.get("/import/students/preview/")
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, "results/import/preview_students.html")
+        self.assertContains(response, "1")  # Row count
+
+    def test_student_csv_preview_submit_creates_batch(self):
+        """Test that submitting student CSV preview creates an import batch."""
+        # Set up session with preview data
+        session = self.client.session
+        session["student_import_preview"] = {
+            "year_class_id": self.year_class.id,
+            "csv_content": "roll_no,first_name,last_name,display_name,official_email\nPMC-100,John,Doe,John Doe,john100@pmc.edu.pk",
+            "row_count": 1,
+            "created": 1,
+            "updated": 0,
+            "skipped": 0,
+            "has_errors": False,
+            "errors": [],
+            "warnings": [],
+        }
+        session.save()
+
+        self.client.force_login(self.staff_user)
+        batch_count_before = ImportBatch.objects.count()
+
+        response = self.client.post("/import/students/preview/", {"submit": "1"})
+        self.assertEqual(response.status_code, 302)
+
+        # Check that batch was created
+        self.assertEqual(ImportBatch.objects.count(), batch_count_before + 1)
+        batch = ImportBatch.objects.latest("id")
+        self.assertEqual(batch.import_type, ImportBatch.ImportType.STUDENTS)
+        self.assertFalse(batch.is_dry_run)
+
+    def test_result_csv_upload_requires_staff(self):
+        """Test that result CSV upload requires staff authentication."""
+        response = self.client.get("/import/results/upload/")
+        self.assertEqual(response.status_code, 302)
+
+    def test_result_csv_upload_view_accessible_for_staff(self):
+        """Test that result CSV upload view is accessible for staff."""
+        self.client.force_login(self.staff_user)
+        response = self.client.get("/import/results/upload/")
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, "results/import/upload_results.html")
+
+    def test_result_csv_upload_with_valid_file(self):
+        """Test uploading a valid result CSV file."""
+        import io
+
+        # Create a student first
+        Student.objects.create(
+            year_class=self.year_class,
+            official_email="student@pmc.edu.pk",
+            roll_number="PMC-100",
+        )
+
+        csv_content = """roll_no,name,block,year,subject,written_marks,viva_marks,total_marks,grade,exam_date
+PMC-100,Test Student,A,1,Anatomy,70,20,90,A,2025-01-15"""
+        csv_file = io.BytesIO(csv_content.encode("utf-8"))
+        csv_file.name = "results.csv"
+
+        self.client.force_login(self.staff_user)
+        response = self.client.post(
+            "/import/results/upload/", {"csv_file": csv_file, "exam": self.exam.id}
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertRedirects(response, "/import/results/preview/")
+
+        # Check session data
+        self.assertIn("result_import_preview", self.client.session)
+
+    def test_result_csv_preview_shows_summary(self):
+        """Test that result CSV preview shows import summary."""
+        # Create a batch for the preview
+        batch = ImportBatch.objects.create(
+            import_type=ImportBatch.ImportType.RESULTS,
+            exam=self.exam,
+            started_by=self.staff_user,
+            is_dry_run=True,
+        )
+
+        # Set up session with preview data
+        session = self.client.session
+        session["result_import_preview"] = {
+            "exam_id": self.exam.id,
+            "batch_id": batch.id,
+            "csv_content": "roll_no,name,block,year,subject,written_marks,viva_marks,total_marks,grade,exam_date\nPMC-100,Test,A,1,Anatomy,70,20,90,A,2025-01-15",
+            "filename": "results.csv",
+            "row_count": 1,
+            "created": 1,
+            "updated": 0,
+            "skipped": 0,
+            "has_errors": False,
+            "errors": [],
+            "warnings": [],
+        }
+        session.save()
+
+        self.client.force_login(self.staff_user)
+        response = self.client.get("/import/results/preview/")
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, "results/import/preview_results.html")
+        self.assertContains(response, self.exam.title)
+
+    def test_result_csv_preview_submit_creates_results(self):
+        """Test that submitting result CSV preview creates results."""
+        # Create a student first
+        student = Student.objects.create(
+            year_class=self.year_class,
+            official_email="student@pmc.edu.pk",
+            roll_number="PMC-100",
+        )
+
+        # Create a batch for the preview
+        batch = ImportBatch.objects.create(
+            import_type=ImportBatch.ImportType.RESULTS,
+            exam=self.exam,
+            started_by=self.staff_user,
+            is_dry_run=True,
+        )
+
+        # Set up session with preview data
+        session = self.client.session
+        session["result_import_preview"] = {
+            "exam_id": self.exam.id,
+            "batch_id": batch.id,
+            "csv_content": "roll_no,name,block,year,subject,written_marks,viva_marks,total_marks,grade,exam_date\nPMC-100,Test,A,1,Anatomy,70,20,90,A,2025-01-15",
+            "filename": "results.csv",
+            "row_count": 1,
+            "created": 1,
+            "updated": 0,
+            "skipped": 0,
+            "has_errors": False,
+            "errors": [],
+            "warnings": [],
+        }
+        session.save()
+
+        self.client.force_login(self.staff_user)
+        result_count_before = Result.objects.count()
+
+        response = self.client.post("/import/results/preview/", {"submit": "1"})
+        self.assertEqual(response.status_code, 302)
+
+        # Check that results were created
+        self.assertGreater(Result.objects.count(), result_count_before)
+
+        # Check that a new batch was created and marked as completed
+        new_batch = ImportBatch.objects.latest("id")
+        self.assertFalse(new_batch.is_dry_run)
+        self.assertIsNotNone(new_batch.completed_at)
+
+    def test_csv_preview_without_session_redirects(self):
+        """Test that accessing preview without session data redirects."""
+        self.client.force_login(self.staff_user)
+
+        # Try to access preview without upload
+        response = self.client.get("/import/students/preview/")
+        self.assertEqual(response.status_code, 200)
+        # Should show error message (checked via messages framework)
+
+        response = self.client.get("/import/results/preview/")
+        self.assertEqual(response.status_code, 200)
+        # Should show error message
+
+    def test_student_preview_post_without_session_redirects(self):
+        """Test posting to preview without session redirects."""
+        self.client.force_login(self.staff_user)
+        response = self.client.post("/import/students/preview/", {"submit": "1"})
+        self.assertEqual(response.status_code, 302)
+
+    def test_result_preview_post_without_session_redirects(self):
+        """Test posting to preview without session redirects."""
+        self.client.force_login(self.staff_user)
+        response = self.client.post("/import/results/preview/", {"submit": "1"})
+        self.assertEqual(response.status_code, 302)
+
+    def test_student_preview_post_without_submit_redirects(self):
+        """Test posting to student preview without submit button redirects."""
+        session = self.client.session
+        session["student_import_preview"] = {"csv_content": "test"}
+        session.save()
+
+        self.client.force_login(self.staff_user)
+        response = self.client.post("/import/students/preview/", {"cancel": "1"})
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("/import/students/upload/", response.url)
+
+    def test_result_preview_post_without_submit_redirects(self):
+        """Test posting to result preview without submit button redirects."""
+        session = self.client.session
+        session["result_import_preview"] = {"csv_content": "test", "filename": "test.csv"}
+        session.save()
+
+        self.client.force_login(self.staff_user)
+        response = self.client.post("/import/results/preview/", {"cancel": "1"})
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("/import/results/upload/", response.url)
+
+
+class AdminActionsTests(TestCase):
+    """Tests for admin bulk actions."""
+
+    def setUp(self):
+        from django.contrib.admin.sites import AdminSite
+        from django.contrib.auth import get_user_model
+
+        User = get_user_model()
+        self.admin_user = User.objects.create_user(
+            username="admin", email="admin@pmc.edu.pk", is_staff=True, is_superuser=True
+        )
+        self.year_class = YearClass.objects.create(label="1st Year", order=1)
+        self.student = Student.objects.create(
+            year_class=self.year_class,
+            official_email="student@pmc.edu.pk",
+            roll_number="PMC-100",
+        )
+        self.exam = Exam.objects.create(
+            year_class=self.year_class,
+            code="BLOCK-A-2025",
+            title="Block A Exam",
+            kind=Exam.ExamKind.BLOCK,
+            exam_date=date.today(),
+        )
+        self.batch = ImportBatch.objects.create(
+            import_type=ImportBatch.ImportType.RESULTS,
+            is_dry_run=False,
+        )
+
+        self.site = AdminSite()
+        self.result_admin = ResultAdmin(Result, self.site)
+
+    def test_verify_results_action(self):
+        """Test bulk verify action."""
+        from unittest.mock import Mock
+
+        from django.http import HttpRequest
+
+        # Create SUBMITTED results
+        result1 = Result.objects.create(
+            student=self.student,
+            exam=self.exam,
+            import_batch=self.batch,
+            roll_number="PMC-100",
+            name="Test",
+            subject="Anatomy",
+            block="A",
+            year=1,
+            total=Decimal("80"),
+            grade="A",
             exam_date=date.today(),
             status=Result.ResultStatus.SUBMITTED,
         )
-        
-        draft_results = Result.objects.by_status(Result.ResultStatus.DRAFT)
-        self.assertIn(draft, draft_results)
-        self.assertNotIn(submitted, draft_results)
-        
-        submitted_results = Result.objects.by_status(Result.ResultStatus.SUBMITTED)
-        self.assertIn(submitted, submitted_results)
-        self.assertNotIn(draft, submitted_results)
 
+        request = HttpRequest()
+        request.user = self.admin_user
+        queryset = Result.objects.filter(id=result1.id)
 
-class ResultSyncMarksTests(TestCase):
-    """Tests for the sync_marks_with_flags method."""
-    
-    def setUp(self) -> None:
-        self.year_class = YearClass.objects.create(label="2nd Year", order=2)
-        self.student = Student.objects.create(
-            year_class=self.year_class,
-            official_email="student@pmc.edu.pk",
-            roll_number="PMC-001",
-        )
-        self.batch = ImportBatch.objects.create(
-            import_type=ImportBatch.ImportType.RESULTS,
-            is_dry_run=False,
-        )
-    
-    def test_sync_marks_with_flags_copies_legacy_fields(self):
-        """Test that sync_marks_with_flags copies legacy fields to new fields."""
-        result = Result(
+        # Mock message_user
+        self.result_admin.message_user = Mock()
+
+        self.result_admin.verify_results(request, queryset)
+
+        result1.refresh_from_db()
+        self.assertEqual(result1.status, Result.ResultStatus.VERIFIED)
+
+        result1.refresh_from_db()
+        self.assertEqual(result1.status, Result.ResultStatus.VERIFIED)
+
+    def test_return_results_action(self):
+        """Test bulk return action."""
+        from django.http import HttpRequest
+
+        result1 = Result.objects.create(
             student=self.student,
+            exam=self.exam,
             import_batch=self.batch,
-            roll_number=self.student.roll_number,
+            roll_number="PMC-100",
             name="Test",
-            block="E",
-            year=2025,
-            subject="Test",
-            written_marks=Decimal("70.00"),
-            viva_marks=Decimal("20.00"),
-            total_marks=Decimal("90.00"),
+            subject="Anatomy",
+            block="A",
+            year=1,
+            total=Decimal("80"),
             grade="A",
             exam_date=date.today(),
+            status=Result.ResultStatus.SUBMITTED,
         )
-        
-        result.sync_marks_with_flags()
-        
-        self.assertEqual(result.theory, result.written_marks)
-        self.assertEqual(result.practical, result.viva_marks)
-        self.assertEqual(result.total, result.total_marks)
-        self.assertTrue(hasattr(result, '_theory_set'))
-        self.assertTrue(hasattr(result, '_practical_set'))
-        self.assertTrue(hasattr(result, '_total_set'))
+
+        request = HttpRequest()
+        request.user = self.admin_user
+        queryset = Result.objects.filter(id=result1.id)
+
+        self.result_admin.message_user = Mock()
+
+        self.result_admin.return_results(request, queryset)
+
+        result1.refresh_from_db()
+        self.assertEqual(result1.status, Result.ResultStatus.RETURNED)
+
+    def test_publish_results_action(self):
+        """Test bulk publish action."""
+        from django.http import HttpRequest
+
+        result1 = Result.objects.create(
+            student=self.student,
+            exam=self.exam,
+            import_batch=self.batch,
+            roll_number="PMC-100",
+            name="Test",
+            subject="Anatomy",
+            block="A",
+            year=1,
+            total=Decimal("80"),
+            grade="A",
+            exam_date=date.today(),
+            status=Result.ResultStatus.VERIFIED,
+        )
+
+        request = HttpRequest()
+        request.user = self.admin_user
+        queryset = Result.objects.filter(id=result1.id)
+
+        self.result_admin.message_user = Mock()
+
+        self.result_admin.publish_results(request, queryset)
+
+        result1.refresh_from_db()
+        self.assertEqual(result1.status, Result.ResultStatus.PUBLISHED)
+
+    def test_unpublish_results_action(self):
+        """Test bulk unpublish action."""
+        from django.http import HttpRequest
+        from django.utils import timezone
+
+        result1 = Result.objects.create(
+            student=self.student,
+            exam=self.exam,
+            import_batch=self.batch,
+            roll_number="PMC-100",
+            name="Test",
+            subject="Anatomy",
+            block="A",
+            year=1,
+            total=Decimal("80"),
+            grade="A",
+            exam_date=date.today(),
+            status=Result.ResultStatus.PUBLISHED,
+            published_at=timezone.now(),
+        )
+
+        request = HttpRequest()
+        request.user = self.admin_user
+        queryset = Result.objects.filter(id=result1.id)
+
+        self.result_admin.message_user = Mock()
+
+        self.result_admin.unpublish_results(request, queryset)
+
+        result1.refresh_from_db()
+        self.assertEqual(result1.status, Result.ResultStatus.VERIFIED)
+        self.assertIsNone(result1.published_at)
+
+    def test_export_as_csv_action(self):
+        """Test CSV export action."""
+        from django.http import HttpRequest
+
+        result1 = Result.objects.create(
+            student=self.student,
+            exam=self.exam,
+            import_batch=self.batch,
+            roll_number="PMC-100",
+            name="Test Student",
+            subject="Anatomy",
+            block="A",
+            year=1,
+            theory=Decimal("70"),
+            practical=Decimal("20"),
+            total=Decimal("90"),
+            grade="A",
+            exam_date=date.today(),
+            status=Result.ResultStatus.PUBLISHED,
+        )
+
+        request = HttpRequest()
+        request.user = self.admin_user
+        queryset = Result.objects.filter(id=result1.id)
+
+        self.result_admin.message_user = Mock()
+
+        response = self.result_admin.export_as_csv(request, queryset)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response["Content-Type"], "text/csv")
+        self.assertIn("results_export.csv", response["Content-Disposition"])
+
+        content = response.content.decode("utf-8")
+        self.assertIn("PMC-100", content)
+        self.assertIn("Test Student", content)
+        self.assertIn("Anatomy", content)
 
 
-class ResultStatusLogTests(TestCase):
-    """Tests for status log functionality."""
-    
-    def setUp(self) -> None:
-        self.year_class = YearClass.objects.create(label="2nd Year", order=2)
+class BackfillCommandTests(TestCase):
+    """Tests for the backfill_result_status management command."""
+
+    def setUp(self):
+        from django.contrib.auth import get_user_model
+
+        User = get_user_model()
+        self.user = User.objects.create_user(username="testuser", email="test@pmc.edu.pk")
+        self.year_class = YearClass.objects.create(label="1st Year", order=1)
         self.student = Student.objects.create(
             year_class=self.year_class,
             official_email="student@pmc.edu.pk",
-            roll_number="PMC-001",
+            roll_number="PMC-100",
+        )
+        self.exam = Exam.objects.create(
+            year_class=self.year_class,
+            code="TEST-2025",
+            title="Test Exam",
+            kind=Exam.ExamKind.BLOCK,
+            exam_date=date.today(),
         )
         self.batch = ImportBatch.objects.create(
             import_type=ImportBatch.ImportType.RESULTS,
             is_dry_run=False,
         )
-        self.user = get_user_model().objects.create_user(
-            username="admin",
-            email="admin@pmc.edu.pk",
+
+    def test_backfill_command_dry_run(self):
+        """Test backfill command in dry-run mode."""
+        from io import StringIO
+
+        from django.core.management import call_command
+        from django.utils import timezone
+
+        # Create a result with published_at but DRAFT status
+        Result.objects.create(
+            student=self.student,
+            exam=self.exam,
+            import_batch=self.batch,
+            roll_number="PMC-100",
+            name="Test",
+            subject="Anatomy",
+            block="A",
+            year=1,
+            total=Decimal("80"),
+            grade="A",
+            exam_date=date.today(),
+            status=Result.ResultStatus.DRAFT,
+            published_at=timezone.now(),
         )
-    
-    def test_status_log_tracks_transitions(self):
-        """Test that status_log properly tracks status transitions."""
+
+        out = StringIO()
+        call_command("backfill_result_status", "--dry-run", stdout=out)
+        output = out.getvalue()
+
+        self.assertIn("DRY RUN", output)
+        self.assertIn("Would update", output)
+
+        # Verify no actual changes
+        result = Result.objects.get(student=self.student)
+        self.assertEqual(result.status, Result.ResultStatus.DRAFT)
+
+    def test_backfill_command_applies_changes(self):
+        """Test backfill command actually updates results."""
+        from io import StringIO
+
+        from django.core.management import call_command
+        from django.utils import timezone
+
+        # Create a result with published_at but DRAFT status
+        Result.objects.create(
+            student=self.student,
+            exam=self.exam,
+            import_batch=self.batch,
+            roll_number="PMC-100",
+            name="Test",
+            subject="Anatomy",
+            block="A",
+            year=1,
+            total=Decimal("80"),
+            grade="A",
+            exam_date=date.today(),
+            status=Result.ResultStatus.DRAFT,
+            published_at=timezone.now(),
+        )
+
+        out = StringIO()
+        call_command("backfill_result_status", stdout=out)
+        output = out.getvalue()
+
+        self.assertIn("Successfully updated", output)
+
+        # Verify changes applied
+        result = Result.objects.get(student=self.student)
+        self.assertEqual(result.status, Result.ResultStatus.PUBLISHED)
+
+    def test_backfill_command_no_changes_needed(self):
+        """Test backfill command when no results need updating."""
+        from io import StringIO
+
+        from django.core.management import call_command
+
+        # Create a result that's already correct
+        Result.objects.create(
+            student=self.student,
+            exam=self.exam,
+            import_batch=self.batch,
+            roll_number="PMC-100",
+            name="Test",
+            subject="Anatomy",
+            block="A",
+            year=1,
+            total=Decimal("80"),
+            grade="A",
+            exam_date=date.today(),
+            status=Result.ResultStatus.PUBLISHED,
+            published_at=timezone.now(),
+        )
+
+        out = StringIO()
+        call_command("backfill_result_status", stdout=out)
+        output = out.getvalue()
+
+        self.assertIn("No results need to be backfilled", output)
+
+
+class AllowPublishFlagTests(TestCase):
+    """Tests for ALLOW_PUBLISH feature flag."""
+
+    def setUp(self):
+        from django.contrib.admin.sites import AdminSite
+        from django.contrib.auth import get_user_model
+
+        User = get_user_model()
+        self.admin_user = User.objects.create_user(
+            username="admin", email="admin@pmc.edu.pk", is_staff=True
+        )
+        self.year_class = YearClass.objects.create(label="1st Year", order=1)
+        self.student = Student.objects.create(
+            year_class=self.year_class,
+            official_email="student@pmc.edu.pk",
+            roll_number="PMC-100",
+        )
+        self.exam = Exam.objects.create(
+            year_class=self.year_class,
+            code="TEST-2025",
+            title="Test Exam",
+            kind=Exam.ExamKind.BLOCK,
+            exam_date=date.today(),
+        )
+        self.batch = ImportBatch.objects.create(
+            import_type=ImportBatch.ImportType.RESULTS,
+            is_dry_run=False,
+        )
+        self.site = AdminSite()
+        self.result_admin = ResultAdmin(Result, self.site)
+
+    def test_publish_blocked_when_flag_disabled(self):
+        """Test that publishing is blocked when ALLOW_PUBLISH=False."""
+        from django.http import HttpRequest
+
         result = Result.objects.create(
             student=self.student,
+            exam=self.exam,
             import_batch=self.batch,
-            roll_number=self.student.roll_number,
+            roll_number="PMC-100",
             name="Test",
-            block="E",
-            year=2025,
-            subject="Test",
-            written_marks=Decimal("70.00"),
-            viva_marks=Decimal("20.00"),
-            total_marks=Decimal("90.00"),
+            subject="Anatomy",
+            block="A",
+            year=1,
+            total=Decimal("80"),
             grade="A",
             exam_date=date.today(),
+            status=Result.ResultStatus.VERIFIED,
         )
-        
-        # Submit the result
-        result.submit(self.user)
+
+        request = HttpRequest()
+        request.user = self.admin_user
+        queryset = Result.objects.filter(id=result.id)
+
+        self.result_admin.message_user = Mock()
+
+        with self.settings(ALLOW_PUBLISH=False):
+            self.result_admin.publish_results(request, queryset)
+
+        # Verify result was NOT published
         result.refresh_from_db()
-        
-        self.assertIsInstance(result.status_log, list)
-        self.assertGreater(len(result.status_log), 0)
-        self.assertEqual(result.status_log[0]['from_status'], 'DRAFT')
-        self.assertEqual(result.status_log[0]['to_status'], 'SUBMITTED')
-        self.assertEqual(result.status_log[0]['user'], 'admin')
+        self.assertEqual(result.status, Result.ResultStatus.VERIFIED)
 
+        # Verify error message was shown
+        self.result_admin.message_user.assert_called_once()
+        call_args = self.result_admin.message_user.call_args
+        self.assertIn("disabled", str(call_args))
 
-class ResultNullMarksValidationTests(TestCase):
-    """Test validation with null marks."""
-    
-    def setUp(self) -> None:
-        self.year_class = YearClass.objects.create(label="2nd Year", order=2)
-        self.student = Student.objects.create(
-            year_class=self.year_class,
-            official_email="student@pmc.edu.pk",
-            roll_number="PMC-001",
-        )
-        self.batch = ImportBatch.objects.create(
-            import_type=ImportBatch.ImportType.RESULTS,
-            is_dry_run=False,
-        )
-    
-    def test_null_marks_validation_skipped(self):
-        """Test that None marks are skipped in validation."""
-        result = Result(
+    def test_publish_allowed_when_flag_enabled(self):
+        """Test that publishing works when ALLOW_PUBLISH=True."""
+        from django.http import HttpRequest
+
+        result = Result.objects.create(
             student=self.student,
+            exam=self.exam,
             import_batch=self.batch,
-            roll_number=self.student.roll_number,
+            roll_number="PMC-100",
             name="Test",
-            block="E",
-            year=2025,
-            subject="Test",
-            written_marks=None,  # Null value
-            viva_marks=Decimal("20.00"),
-            total_marks=Decimal("20.00"),
-            grade="C",
+            subject="Anatomy",
+            block="A",
+            year=1,
+            total=Decimal("80"),
+            grade="A",
             exam_date=date.today(),
+            status=Result.ResultStatus.VERIFIED,
         )
-        
-        # Should not raise ValidationError
-        result.full_clean()
-        result.save()
-        self.assertIsNone(result.written_marks)
 
+        request = HttpRequest()
+        request.user = self.admin_user
+        queryset = Result.objects.filter(id=result.id)
 
+        self.result_admin.message_user = Mock()
+
+        with self.settings(ALLOW_PUBLISH=True):
+            self.result_admin.publish_results(request, queryset)
+
+        # Verify result WAS published
+        result.refresh_from_db()
+        self.assertEqual(result.status, Result.ResultStatus.PUBLISHED)

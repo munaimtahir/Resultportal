@@ -1,0 +1,110 @@
+{% extends "base.html" %}
+
+{% block title %}Preview Result Import{% endblock %}
+
+{% block content %}
+<div class="container mt-5">
+    <div class="row justify-content-center">
+        <div class="col-md-10">
+            <div class="card">
+                <div class="card-header {% if has_errors %}bg-danger{% else %}bg-success{% endif %} text-white">
+                    <h4 class="mb-0">Result Import Preview - {{ exam.title }}</h4>
+                </div>
+                <div class="card-body">
+                    {% if messages %}
+                        {% for message in messages %}
+                            <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+                                {{ message }}
+                                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                            </div>
+                        {% endfor %}
+                    {% endif %}
+
+                    <div class="alert alert-info">
+                        <strong>Exam:</strong> {{ exam.code }} - {{ exam.title }}<br>
+                        <strong>Date:</strong> {{ exam.exam_date }}<br>
+                        <strong>Year/Class:</strong> {{ exam.year_class.label }}
+                    </div>
+
+                    <div class="row mb-4">
+                        <div class="col-md-3">
+                            <div class="card">
+                                <div class="card-body text-center">
+                                    <h5 class="card-title">Total Rows</h5>
+                                    <p class="display-6">{{ row_count }}</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="card border-success">
+                                <div class="card-body text-center">
+                                    <h5 class="card-title">New</h5>
+                                    <p class="display-6 text-success">{{ created }}</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="card border-warning">
+                                <div class="card-body text-center">
+                                    <h5 class="card-title">Updated</h5>
+                                    <p class="display-6 text-warning">{{ updated }}</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="card border-danger">
+                                <div class="card-body text-center">
+                                    <h5 class="card-title">Skipped</h5>
+                                    <p class="display-6 text-danger">{{ skipped }}</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {% if errors %}
+                    <div class="alert alert-danger">
+                        <h5>Errors ({{ errors|length }})</h5>
+                        <ul>
+                            {% for error in errors %}
+                                <li>Row {{ error.row }}: {{ error.errors|join:", " }}</li>
+                            {% endfor %}
+                        </ul>
+                    </div>
+                    {% endif %}
+
+                    {% if warnings %}
+                    <div class="alert alert-warning">
+                        <h5>Warnings ({{ warnings|length }})</h5>
+                        <ul>
+                            {% for warning in warnings %}
+                                <li>Row {{ warning.row }}: {{ warning.warnings|join:", " }}</li>
+                            {% endfor %}
+                        </ul>
+                    </div>
+                    {% endif %}
+
+                    {% if not has_errors %}
+                    <div class="alert alert-success">
+                        <strong>Validation passed!</strong> The import can proceed. Results will be submitted for admin review after import.
+                    </div>
+                    {% else %}
+                    <div class="alert alert-danger">
+                        <strong>Validation failed!</strong> Please fix the errors in your CSV file and try again.
+                    </div>
+                    {% endif %}
+
+                    <form method="post">
+                        {% csrf_token %}
+                        <div class="d-flex justify-content-between">
+                            <a href="{% url 'results:upload_results' %}" class="btn btn-secondary">Back</a>
+                            {% if not has_errors %}
+                                <button type="submit" name="submit" class="btn btn-primary">Submit Import</button>
+                            {% endif %}
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

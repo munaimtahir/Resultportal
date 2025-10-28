@@ -1,11 +1,11 @@
 [run]
-source = server/apps
+source = apps
 omit =
     */migrations/*
     */tests.py
     */test_*.py
-    *_tests.py
-    */management/*
+    */__pycache__/*
+    */management/commands/*
 
 [report]
 exclude_lines =

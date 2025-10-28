@@ -63,6 +63,8 @@ MIDDLEWARE = [
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
+    # Feature flag middleware (enable in production if needed)
+    # "config.middleware.ResultsOnlyMiddleware",
 ]
 
 ROOT_URLCONF = "config.urls"
@@ -296,6 +298,11 @@ LOGGING = {
 
 # Create logs directory if it doesn't exist
 (ROOT_DIR / "logs").mkdir(exist_ok=True)
+
+
+# Feature Flags
+FEATURE_RESULTS_ONLY = os.getenv("FEATURE_RESULTS_ONLY", "false").lower() == "true"
+ALLOW_PUBLISH = os.getenv("ALLOW_PUBLISH", "true").lower() == "true"
 
 
 # Sentry Configuration (Optional)
