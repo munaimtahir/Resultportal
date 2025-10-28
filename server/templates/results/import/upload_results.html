@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+
+{% block title %}Upload Results CSV{% endblock %}
+
+{% block content %}
+<div class="container mt-5">
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+            <div class="card">
+                <div class="card-header bg-primary text-white">
+                    <h4 class="mb-0">Upload Results CSV</h4>
+                </div>
+                <div class="card-body">
+                    {% if messages %}
+                        {% for message in messages %}
+                            <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+                                {{ message }}
+                                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                            </div>
+                        {% endfor %}
+                    {% endif %}
+
+                    <p class="text-muted">
+                        Upload a CSV file containing result data. The file will be validated before import.
+                    </p>
+
+                    <form method="post" enctype="multipart/form-data">
+                        {% csrf_token %}
+                        
+                        <div class="mb-3">
+                            {{ form.exam.label_tag }}
+                            {{ form.exam }}
+                            {% if form.exam.help_text %}
+                                <small class="form-text text-muted">{{ form.exam.help_text }}</small>
+                            {% endif %}
+                            {% if form.exam.errors %}
+                                <div class="invalid-feedback d-block">
+                                    {{ form.exam.errors.0 }}
+                                </div>
+                            {% endif %}
+                        </div>
+
+                        <div class="mb-3">
+                            {{ form.csv_file.label_tag }}
+                            {{ form.csv_file }}
+                            {% if form.csv_file.help_text %}
+                                <small class="form-text text-muted">{{ form.csv_file.help_text }}</small>
+                            {% endif %}
+                            {% if form.csv_file.errors %}
+                                <div class="invalid-feedback d-block">
+                                    {{ form.csv_file.errors.0 }}
+                                </div>
+                            {% endif %}
+                        </div>
+
+                        <div class="alert alert-info">
+                            <strong>CSV Format:</strong>
+                            <ul class="mb-0">
+                                <li>Required columns: roll_no, name, block, year, subject, grade, exam_date</li>
+                                <li>Mark columns: written_marks, viva_marks, total_marks OR theory, practical, total</li>
+                                <li>Optional columns: respondent_id</li>
+                                <li>First row must contain column headers</li>
+                            </ul>
+                        </div>
+
+                        <div class="d-flex justify-content-between">
+                            <a href="{% url 'admin:index' %}" class="btn btn-secondary">Cancel</a>
+                            <button type="submit" class="btn btn-primary">Preview Import</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

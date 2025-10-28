@@ -63,3 +63,71 @@ class URLConfigTests(TestCase):
         except Exception:
             # URL might not be defined yet, but namespace should exist
             pass
+
+
+class FeatureFlagsTests(TestCase):
+    """Tests for feature flags and middleware."""
+
+    def test_results_only_middleware_blocks_unallowed_paths(self):
+        """Test that FEATURE_RESULTS_ONLY blocks non-allowed paths."""
+        from django.conf import settings
+        from django.http import HttpRequest, HttpResponse
+
+        from config.middleware import ResultsOnlyMiddleware
+
+        # Mock get_response
+        def mock_get_response(request):
+            return HttpResponse("OK")
+
+        # Enable feature flag
+        with self.settings(FEATURE_RESULTS_ONLY=True):
+            middleware = ResultsOnlyMiddleware(mock_get_response)
+
+            # Test blocked path
+            request = HttpRequest()
+            request.path = "/some/other/path/"
+            response = middleware(request)
+            self.assertEqual(response.status_code, 403)
+
+    def test_results_only_middleware_allows_approved_paths(self):
+        """Test that FEATURE_RESULTS_ONLY allows approved paths."""
+        from django.http import HttpRequest, HttpResponse
+
+        from config.middleware import ResultsOnlyMiddleware
+
+        def mock_get_response(request):
+            return HttpResponse("OK")
+
+        with self.settings(FEATURE_RESULTS_ONLY=True):
+            middleware = ResultsOnlyMiddleware(mock_get_response)
+
+            # Test allowed paths
+            for path in [
+                "/accounts/login/",
+                "/me/",
+                "/admin/",
+                "/static/test.css",
+                "/healthz",
+                "/import/students/upload/",
+            ]:
+                request = HttpRequest()
+                request.path = path
+                response = middleware(request)
+                self.assertEqual(response.status_code, 200, f"Path {path} should be allowed")
+
+    def test_results_only_middleware_disabled_allows_all(self):
+        """Test that when FEATURE_RESULTS_ONLY is False, all paths are allowed."""
+        from django.http import HttpRequest, HttpResponse
+
+        from config.middleware import ResultsOnlyMiddleware
+
+        def mock_get_response(request):
+            return HttpResponse("OK")
+
+        with self.settings(FEATURE_RESULTS_ONLY=False):
+            middleware = ResultsOnlyMiddleware(mock_get_response)
+
+            request = HttpRequest()
+            request.path = "/some/random/path/"
+            response = middleware(request)
+            self.assertEqual(response.status_code, 200)
