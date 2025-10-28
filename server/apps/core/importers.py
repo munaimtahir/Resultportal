@@ -82,12 +82,12 @@ class BaseCSVImporter(ABC):
             pass
 
     @abstractmethod
-    def _get_import_type(self) -> ImportBatch.ImportType:  # pragma: no cover
+    def _get_import_type(self) -> ImportBatch.ImportType:
         """Return the import type for batch creation."""
         pass
 
     @abstractmethod
-    def _validate_headers(self, headers: Iterable[str] | None) -> None:  # pragma: no cover
+    def _validate_headers(self, headers: Iterable[str] | None) -> None:
         """Validate the CSV headers."""
         pass
 
@@ -107,7 +107,7 @@ class BaseCSVImporter(ABC):
         Returns:
             tuple: (action, created_delta, updated_delta, skipped_delta, row_result)
         """
-        pass  # pragma: no cover
+        pass
 
     def _process(self, *, dry_run: bool) -> ImportSummary:
         """Core processing logic shared by both importers."""

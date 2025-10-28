@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Authenticate with Token{% endblock %}
+
+{% block content %}
+<div class="container mt-5">
+    <div class="row justify-content-center">
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header bg-primary text-white">
+                    <h4 class="mb-0">Enter Your Access Token</h4>
+                </div>
+                <div class="card-body">
+                    {% if messages %}
+                        {% for message in messages %}
+                            <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+                                {{ message }}
+                                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                            </div>
+                        {% endfor %}
+                    {% endif %}
+
+                    <p class="text-muted">
+                        Enter the access token you received to view your results.
+                    </p>
+
+                    <form method="post" class="mt-4">
+                        {% csrf_token %}
+                        
+                        <div class="mb-3">
+                            <label for="token" class="form-label">Access Token *</label>
+                            <input type="text" 
+                                   class="form-control font-monospace {% if form.token.errors %}is-invalid{% endif %}" 
+                                   id="token" 
+                                   name="token" 
+                                   value="{{ form.token.value|default:'' }}"
+                                   placeholder="Enter your access token"
+                                   required>
+                            {% if form.token.errors %}
+                                <div class="invalid-feedback">
+                                    {{ form.token.errors.0 }}
+                                </div>
+                            {% endif %}
+                        </div>
+
+                        {% if form.non_field_errors %}
+                            <div class="alert alert-danger">
+                                {{ form.non_field_errors.0 }}
+                            </div>
+                        {% endif %}
+
+                        <button type="submit" class="btn btn-primary w-100">
+                            Access Results
+                        </button>
+                    </form>
+
+                    <div class="mt-3 text-center">
+                        <p class="text-muted mb-2">Don't have a token?</p>
+                        <a href="{% url 'accounts:token_request' %}" class="btn btn-outline-primary btn-sm">
+                            Request New Token
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

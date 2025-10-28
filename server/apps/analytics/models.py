@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from django.db import models
 
-from apps.results.models import Exam
 from apps.accounts.models import YearClass
+from apps.results.models import Exam
 
 
 class ExamAggregate(models.Model):
@@ -44,7 +44,7 @@ class ExamAggregate(models.Model):
     class Meta:
         ordering = ("-computed_at",)
 
-    def __str__(self) -> str:  # pragma: no cover
+    def __str__(self) -> str:
         return f"Aggregates for {self.exam.code}"
 
 
@@ -74,7 +74,7 @@ class ComponentAggregate(models.Model):
         ordering = ("-computed_at", "component")
         unique_together = [["exam", "component"]]
 
-    def __str__(self) -> str:  # pragma: no cover
+    def __str__(self) -> str:
         return f"{self.exam.code} - {self.get_component_display()}"
 
 

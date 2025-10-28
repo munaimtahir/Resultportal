@@ -1,4 +1,7 @@
+import csv
+
 from django.contrib import admin
+from django.http import HttpResponse
 
 from .models import Exam, ImportBatch, Result
 
@@ -91,10 +94,49 @@ class ResultAdmin(admin.ModelAdmin):
         ),
     )
 
-    actions = ["publish_results", "unpublish_results", "verify_results"]
+    actions = [
+        "verify_results",
+        "return_results",
+        "publish_results",
+        "unpublish_results",
+        "export_as_csv",
+    ]
 
-    def publish_results(self, request, queryset):  # pragma: no cover - admin UI
+    def verify_results(self, request, queryset):
+        """Bulk verify selected results."""
+        count = 0
+        for result in queryset:
+            if result.status == result.ResultStatus.SUBMITTED:
+                result.verify(request.user)
+                count += 1
+        self.message_user(request, f"Verified {count} result(s).")
+
+    verify_results.short_description = "Verify selected results"
+
+    def return_results(self, request, queryset):
+        """Bulk return selected results for correction."""
+        count = 0
+        for result in queryset:
+            if result.status == result.ResultStatus.SUBMITTED:
+                result.return_for_correction(user=request.user)
+                count += 1
+        self.message_user(request, f"Returned {count} result(s) for correction.")
+
+    return_results.short_description = "Return selected results for correction"
+
+    def publish_results(self, request, queryset):
         """Bulk publish selected results."""
+        from django.conf import settings
+
+        # Check ALLOW_PUBLISH flag
+        if not getattr(settings, "ALLOW_PUBLISH", True):
+            self.message_user(
+                request,
+                "Publishing is currently disabled by system configuration.",
+                level="error",
+            )
+            return
+
         count = 0
         for result in queryset:
             if result.status in [result.ResultStatus.VERIFIED, result.ResultStatus.DRAFT]:
@@ -104,7 +146,7 @@ class ResultAdmin(admin.ModelAdmin):
 
     publish_results.short_description = "Publish selected results"
 
-    def unpublish_results(self, request, queryset):  # pragma: no cover - admin UI
+    def unpublish_results(self, request, queryset):
         """Bulk unpublish selected results."""
         count = 0
         for result in queryset:
@@ -115,13 +157,51 @@ class ResultAdmin(admin.ModelAdmin):
 
     unpublish_results.short_description = "Unpublish selected results"
 
-    def verify_results(self, request, queryset):  # pragma: no cover - admin UI
-        """Bulk verify selected results."""
-        count = 0
-        for result in queryset:
-            if result.status == result.ResultStatus.SUBMITTED:
-                result.verify(request.user)
-                count += 1
-        self.message_user(request, f"Verified {count} result(s).")
+    def export_as_csv(self, request, queryset):
+        """Export selected results as CSV."""
+        response = HttpResponse(content_type="text/csv")
+        response["Content-Disposition"] = 'attachment; filename="results_export.csv"'
 
-    verify_results.short_description = "Verify selected results"
+        writer = csv.writer(response)
+        writer.writerow(
+            [
+                "Roll Number",
+                "Name",
+                "Subject",
+                "Year",
+                "Block",
+                "Theory",
+                "Practical",
+                "Total",
+                "Grade",
+                "Status",
+                "Exam Date",
+                "Exam Code",
+                "Verified By",
+                "Published At",
+            ]
+        )
+
+        for result in queryset:
+            writer.writerow(
+                [
+                    result.roll_number,
+                    result.name,
+                    result.subject,
+                    result.year,
+                    result.block,
+                    result.theory,
+                    result.practical,
+                    result.total,
+                    result.grade,
+                    result.status,
+                    result.exam_date,
+                    result.exam.code if result.exam else "",
+                    result.verified_by.username if result.verified_by else "",
+                    result.published_at,
+                ]
+            )
+
+        return response
+
+    export_as_csv.short_description = "Export selected results as CSV"

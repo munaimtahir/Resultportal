@@ -69,14 +69,13 @@ ignore = [
 "*_tests.py" = ["S105", "S106", "S107"]
 
 [tool.coverage.run]
-source = ["apps"]
+source = ["server/apps"]
 omit = [
     "*/migrations/*",
     "*/tests.py",
     "*/test_*.py",
     "*_tests.py",
-    "*/management/*",
-    "**/management/**/*.py",
+    "*/management/commands/*",
 ]
 
 [tool.coverage.report]

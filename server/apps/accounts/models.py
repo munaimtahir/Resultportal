@@ -30,7 +30,7 @@ class YearClass(models.Model):
         verbose_name = "Year/Class"
         verbose_name_plural = "Year/Classes"
 
-    def __str__(self) -> str:  # pragma: no cover
+    def __str__(self) -> str:
         return self.label
 
 
@@ -129,7 +129,7 @@ class Student(models.Model):
             )
         ]
 
-    def __str__(self) -> str:  # pragma: no cover
+    def __str__(self) -> str:
         """Return string representation of Student."""
         if self.display_name:
             return f"{self.display_name} ({self.roll_number or self.official_email})"
@@ -164,7 +164,7 @@ class StudentAccessToken(models.Model):
             models.Index(fields=["expires_at"], name="access_token_expires_idx"),
         ]
 
-    def __str__(self) -> str:  # pragma: no cover
+    def __str__(self) -> str:
         return f"Token for {self.student.roll_number} (expires {self.expires_at:%Y-%m-%d})"
 
     @classmethod

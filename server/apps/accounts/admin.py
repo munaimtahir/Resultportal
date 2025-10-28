@@ -2,7 +2,7 @@
 
 from django.contrib import admin
 
-from .models import Student, YearClass, StudentAccessToken
+from .models import Student, StudentAccessToken, YearClass
 
 
 @admin.register(YearClass)
@@ -51,7 +51,7 @@ class StudentAccessTokenAdmin(admin.ModelAdmin):
     ordering = ("-created_at",)
     readonly_fields = ("created_at", "used_at")
 
-    def get_readonly_fields(self, request, obj=None):  # pragma: no cover - admin UI
+    def get_readonly_fields(self, request, obj=None):  # pragma: no cover
         """Make code readonly after creation."""
         if obj:  # Editing an existing object
             return self.readonly_fields + ("code", "student", "expires_at")

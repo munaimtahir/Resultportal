@@ -180,7 +180,9 @@ class Result(models.Model):
         default=ResultStatus.DRAFT,
         help_text="Current workflow status",
     )
-    status_log = models.JSONField(default=list, blank=True, help_text="Audit trail of status changes")
+    status_log = models.JSONField(
+        default=list, blank=True, help_text="Audit trail of status changes"
+    )
     verified_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,
@@ -299,7 +301,7 @@ class Result(models.Model):
             "to_status": new_status,
             "user": getattr(user, "username", None),
         }
-        if not isinstance(self.status_log, list):  # pragma: no cover - defensive
+        if not isinstance(self.status_log, list):
             self.status_log = []
         self.status_log.append(entry)
 

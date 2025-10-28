@@ -1,4 +1,4 @@
-"""Management command to import results from CSV file."""  # pragma: no cover
+"""Management command to import results from CSV file."""
 
 import sys
 from pathlib import Path

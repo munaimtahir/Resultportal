@@ -8,11 +8,12 @@ from django.contrib.auth import get_user_model
 from django.core.exceptions import PermissionDenied
 from django.test import TestCase
 from django.utils import timezone
+
 from social_core.exceptions import AuthForbidden
 
 from . import pipeline
 from .importers import StudentCSVImporter
-from .models import Student, YearClass, StudentAccessToken
+from .models import Student, StudentAccessToken, YearClass
 
 
 class YearClassModelTests(TestCase):
@@ -534,3 +535,235 @@ class GoogleLoginViewTests(TestCase):
         response = self.client.post("/accounts/logout/")
         # Should redirect after logout
         self.assertIn(response.status_code, [200, 302])
+
+
+class TokenRequestViewTests(TestCase):
+    """Tests for the token request view."""
+
+    def setUp(self):
+        self.year_class = YearClass.objects.create(label="1st Year", order=1)
+        self.student = Student.objects.create(
+            year_class=self.year_class,
+            official_email="student@pmc.edu.pk",
+            roll_number="PMC-123",
+            display_name="Test Student",
+            phone="1234567890",
+        )
+
+    def test_token_request_page_accessible(self):
+        """Test that token request page is accessible."""
+        response = self.client.get("/accounts/token/request/")
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, "accounts/token_login.html")
+
+    def test_token_request_with_email(self):
+        """Test requesting token with email."""
+        response = self.client.post(
+            "/accounts/token/request/",
+            {
+                "roll_number": "PMC-123",
+                "email": "student@pmc.edu.pk",
+                "phone": "",
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertRedirects(response, "/accounts/token/success/")
+        # Token should be created
+        self.assertEqual(StudentAccessToken.objects.filter(student=self.student).count(), 1)
+
+    def test_token_request_with_phone(self):
+        """Test requesting token with phone."""
+        response = self.client.post(
+            "/accounts/token/request/",
+            {
+                "roll_number": "PMC-123",
+                "email": "",
+                "phone": "1234567890",
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertRedirects(response, "/accounts/token/success/")
+
+    def test_token_request_requires_contact_method(self):
+        """Test that either email or phone is required."""
+        response = self.client.post(
+            "/accounts/token/request/",
+            {
+                "roll_number": "PMC-123",
+                "email": "",
+                "phone": "",
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+        form = response.context["form"]
+        self.assertFalse(form.is_valid())
+        self.assertIn("Please provide either", str(form.errors))
+
+    def test_token_request_invalid_roll_number(self):
+        """Test requesting token with invalid roll number."""
+        response = self.client.post(
+            "/accounts/token/request/",
+            {
+                "roll_number": "INVALID",
+                "email": "student@pmc.edu.pk",
+                "phone": "",
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+        form = response.context["form"]
+        self.assertFalse(form.is_valid())
+        self.assertIn("Student with this roll number not found", str(form.errors))
+
+    def test_token_request_wrong_email(self):
+        """Test requesting token with wrong email."""
+        response = self.client.post(
+            "/accounts/token/request/",
+            {
+                "roll_number": "PMC-123",
+                "email": "wrong@pmc.edu.pk",
+                "phone": "",
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+        form = response.context["form"]
+        self.assertFalse(form.is_valid())
+        self.assertIn("does not match our records", str(form.errors))
+
+    def test_token_request_wrong_phone(self):
+        """Test requesting token with wrong phone."""
+        response = self.client.post(
+            "/accounts/token/request/",
+            {
+                "roll_number": "PMC-123",
+                "email": "",
+                "phone": "9999999999",
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+        form = response.context["form"]
+        self.assertFalse(form.is_valid())
+        self.assertIn("does not match our records", str(form.errors))
+
+
+class TokenSuccessViewTests(TestCase):
+    """Tests for the token success view."""
+
+    def setUp(self):
+        self.year_class = YearClass.objects.create(label="1st Year", order=1)
+        self.student = Student.objects.create(
+            year_class=self.year_class,
+            official_email="student@pmc.edu.pk",
+            roll_number="PMC-123",
+            display_name="Test Student",
+        )
+
+    def test_token_success_without_token_redirects(self):
+        """Test that accessing success page without token redirects."""
+        response = self.client.get("/accounts/token/success/")
+        self.assertEqual(response.status_code, 302)
+        self.assertRedirects(response, "/accounts/token/request/")
+
+    def test_token_success_displays_token(self):
+        """Test that success page displays the generated token."""
+        # Generate token via request
+        token = StudentAccessToken.generate_for_student(self.student)
+        session = self.client.session
+        session["token_code"] = token.code
+        session["token_expires"] = token.expires_at.isoformat()
+        session["token_student_id"] = self.student.id
+        session.save()
+
+        response = self.client.get("/accounts/token/success/")
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, token.code)
+        # Token should be removed from session after display
+        self.assertNotIn("token_code", self.client.session)
+
+
+class TokenAuthenticateViewTests(TestCase):
+    """Tests for the token authenticate view."""
+
+    def setUp(self):
+        self.year_class = YearClass.objects.create(label="1st Year", order=1)
+        self.student = Student.objects.create(
+            year_class=self.year_class,
+            official_email="student@pmc.edu.pk",
+            roll_number="PMC-123",
+            display_name="Test Student",
+        )
+        self.token = StudentAccessToken.generate_for_student(self.student)
+
+    def test_authenticate_page_accessible(self):
+        """Test that authenticate page is accessible."""
+        response = self.client.get("/accounts/token/authenticate/")
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, "accounts/token_authenticate.html")
+
+    def test_authenticate_with_valid_token(self):
+        """Test authenticating with valid token."""
+        response = self.client.post(
+            "/accounts/token/authenticate/",
+            {
+                "token": self.token.code,
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertRedirects(response, "/me/")
+        # Token should be marked as used
+        self.token.refresh_from_db()
+        self.assertIsNotNone(self.token.used_at)
+        # Session should have student ID
+        self.assertEqual(self.client.session.get("token_student_id"), self.student.id)
+        self.assertTrue(self.client.session.get("token_authenticated"))
+
+    def test_authenticate_with_invalid_token(self):
+        """Test authenticating with invalid token."""
+        response = self.client.post(
+            "/accounts/token/authenticate/",
+            {
+                "token": "invalid-token",
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+        form = response.context["form"]
+        self.assertFalse(form.is_valid())
+        self.assertIn("Invalid access token", str(form.errors))
+
+    def test_authenticate_with_expired_token(self):
+        """Test authenticating with expired token."""
+        from datetime import timedelta
+
+        from django.utils import timezone
+
+        # Create expired token
+        expired_token = StudentAccessToken.objects.create(
+            student=self.student,
+            code="expired-code",
+            expires_at=timezone.now() - timedelta(hours=1),
+        )
+
+        response = self.client.post(
+            "/accounts/token/authenticate/",
+            {
+                "token": expired_token.code,
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+        form = response.context["form"]
+        self.assertFalse(form.is_valid())
+        self.assertIn("expired or has already been used", str(form.errors))
+
+    def test_authenticate_with_used_token(self):
+        """Test authenticating with already used token."""
+        self.token.mark_used()
+
+        response = self.client.post(
+            "/accounts/token/authenticate/",
+            {
+                "token": self.token.code,
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+        form = response.context["form"]
+        self.assertFalse(form.is_valid())
+        self.assertIn("expired or has already been used", str(form.errors))
