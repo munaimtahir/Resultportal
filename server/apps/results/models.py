@@ -117,11 +117,11 @@ class ImportBatch(models.Model):
 
 
 class ResultQuerySet(models.QuerySet):
-    def published(self) -> "ResultQuerySet":
+    def published(self) -> ResultQuerySet:
         # Source of truth = workflow status; published_at is kept for compatibility/ordering.
         return self.filter(status=Result.ResultStatus.PUBLISHED)
 
-    def by_status(self, status: str) -> "ResultQuerySet":
+    def by_status(self, status: str) -> ResultQuerySet:
         return self.filter(status=status)
 
 

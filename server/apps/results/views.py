@@ -3,8 +3,8 @@
 import io
 
 from django.contrib import messages
-from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
-from django.shortcuts import redirect, render
+from django.contrib.auth.mixins import UserPassesTestMixin
+from django.shortcuts import redirect
 from django.views.generic import FormView, ListView, TemplateView
 
 from apps.accounts.importers import StudentCSVImporter
@@ -79,9 +79,6 @@ class StudentProfileView(TokenOrLoginRequiredMixin, TemplateView):
             Result.objects.published().filter(student=student).count()
         )
         # Include exam information with recheck availability
-        from django.utils import timezone
-
-        from apps.results.models import Exam
 
         exams_with_results = []
         for result in Result.objects.published().filter(student=student).select_related("exam"):

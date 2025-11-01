@@ -69,9 +69,6 @@ class TokenSuccessView(TemplateView):
         context = super().get_context_data(**kwargs)
 
         # Retrieve token from session
-        from datetime import datetime
-
-        from django.utils import timezone
 
         token_code = self.request.session.get("token_code")
         token_expires_str = self.request.session.get("token_expires")
