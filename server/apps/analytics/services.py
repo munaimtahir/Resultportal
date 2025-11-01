@@ -13,6 +13,27 @@ from apps.results.models import Exam, Result
 from .models import AnomalyFlag, ComponentAggregate, ExamAggregate
 
 
+def _calculate_median(values):
+    """
+    Calculate median from a queryset of values.
+    
+    Args:
+        values: QuerySet with values to calculate median from
+        
+    Returns:
+        Decimal median value or None if no values
+    """
+    count = len(values)
+    if count == 0:
+        return None
+    if count % 2 == 1:
+        return Decimal(str(values[count // 2]))
+    else:
+        v1 = Decimal(str(values[count // 2 - 1]))
+        v2 = Decimal(str(values[count // 2]))
+        return (v1 + v2) / Decimal('2')
+
+
 def compute_exam_aggregates(exam: Exam) -> ExamAggregate:
     """
     Compute and persist statistical aggregates for an exam.
@@ -43,11 +64,8 @@ def compute_exam_aggregates(exam: Exam) -> ExamAggregate:
     count = stats['total_students']
     median_score = None
     if count > 0:
-        ordered = results.order_by('total').values_list('total', flat=True)
-        if count % 2 == 1:
-            median_score = ordered[count // 2]
-        else:
-            median_score = (ordered[count // 2 - 1] + ordered[count // 2]) / 2
+        ordered = list(results.order_by('total').values_list('total', flat=True))
+        median_score = _calculate_median(ordered)
     
     # Compute pass/fail metrics (assuming grade 'F' means fail)
     pass_count = results.exclude(grade='F').count()
@@ -111,14 +129,8 @@ def compute_component_aggregates(exam: Exam) -> list[ComponentAggregate]:
             mean=Avg('theory'),
             std_dev=StdDev('theory'),
         )
-        theory_count = theory_results.count()
-        theory_ordered = theory_results.order_by('theory').values_list('theory', flat=True)
-        theory_median = None
-        if theory_count > 0:
-            if theory_count % 2 == 1:
-                theory_median = theory_ordered[theory_count // 2]
-            else:
-                theory_median = (theory_ordered[theory_count // 2 - 1] + theory_ordered[theory_count // 2]) / 2
+        theory_ordered = list(theory_results.order_by('theory').values_list('theory', flat=True))
+        theory_median = _calculate_median(theory_ordered)
         
         agg, _ = ComponentAggregate.objects.update_or_create(
             exam=exam,
@@ -138,14 +150,8 @@ def compute_component_aggregates(exam: Exam) -> list[ComponentAggregate]:
             mean=Avg('practical'),
             std_dev=StdDev('practical'),
         )
-        practical_count = practical_results.count()
-        practical_ordered = practical_results.order_by('practical').values_list('practical', flat=True)
-        practical_median = None
-        if practical_count > 0:
-            if practical_count % 2 == 1:
-                practical_median = practical_ordered[practical_count // 2]
-            else:
-                practical_median = (practical_ordered[practical_count // 2 - 1] + practical_ordered[practical_count // 2]) / 2
+        practical_ordered = list(practical_results.order_by('practical').values_list('practical', flat=True))
+        practical_median = _calculate_median(practical_ordered)
         
         agg, _ = ComponentAggregate.objects.update_or_create(
             exam=exam,
@@ -165,14 +171,8 @@ def compute_component_aggregates(exam: Exam) -> list[ComponentAggregate]:
             mean=Avg('total'),
             std_dev=StdDev('total'),
         )
-        total_count = total_results.count()
-        total_ordered = total_results.order_by('total').values_list('total', flat=True)
-        total_median = None
-        if total_count > 0:
-            if total_count % 2 == 1:
-                total_median = total_ordered[total_count // 2]
-            else:
-                total_median = (total_ordered[total_count // 2 - 1] + total_ordered[total_count // 2]) / 2
+        total_ordered = list(total_results.order_by('total').values_list('total', flat=True))
+        total_median = _calculate_median(total_ordered)
         
         agg, _ = ComponentAggregate.objects.update_or_create(
             exam=exam,

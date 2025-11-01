@@ -10,9 +10,28 @@ from apps.accounts.models import Student, YearClass
 from apps.results.models import Exam, ImportBatch, Result
 
 from .models import AnomalyFlag, ComponentAggregate, ExamAggregate
-from .services import compute_all_analytics, compute_component_aggregates, compute_exam_aggregates, detect_anomalies
+from .services import _calculate_median, compute_all_analytics, compute_component_aggregates, compute_exam_aggregates, detect_anomalies
 
 User = get_user_model()
+
+
+class MedianCalculationTests(TestCase):
+    """Tests for median calculation helper function."""
+
+    def test_calculate_median_empty_list(self):
+        """Test median calculation with empty list."""
+        result = _calculate_median([])
+        self.assertIsNone(result)
+
+    def test_calculate_median_odd_count(self):
+        """Test median calculation with odd number of values."""
+        result = _calculate_median([Decimal('1'), Decimal('2'), Decimal('3')])
+        self.assertEqual(result, Decimal('2'))
+
+    def test_calculate_median_even_count(self):
+        """Test median calculation with even number of values."""
+        result = _calculate_median([Decimal('1'), Decimal('2'), Decimal('3'), Decimal('4')])
+        self.assertEqual(result, Decimal('2.5'))
 
 
 class ExamAggregateComputationTests(TestCase):
@@ -259,6 +278,11 @@ class ComponentAggregateComputationTests(TestCase):
 
         total_agg = next((a for a in aggregates if a.component == ComponentAggregate.Component.TOTAL), None)
         self.assertEqual(total_agg.median_score, Decimal("110.00"))  # (100 + 120) / 2
+
+    def test_compute_component_aggregates_with_no_results(self):
+        """Test component aggregate computation with no published results."""
+        aggregates = compute_component_aggregates(self.exam)
+        self.assertEqual(len(aggregates), 0)
 
 
 
