@@ -1,0 +1,162 @@
+{% extends "base.html" %}
+
+{% block title %}{{ exam.code }} Analytics - Result Portal{% endblock %}
+
+{% block content %}
+<div style="max-width: 1200px; margin: 0 auto; padding: 2rem;">
+  <header style="margin-bottom: 2rem;">
+    <div style="margin-bottom: 0.5rem;">
+      <a href="{% url 'analytics:dashboard' %}" style="color: #0066cc; text-decoration: none; font-size: 0.875rem;">
+        ← Back to Dashboard
+      </a>
+    </div>
+    <h1 style="font-size: 2rem; font-weight: 700; margin-bottom: 0.5rem;">{{ exam.code }}</h1>
+    <p style="color: #666;">{{ exam.title }}</p>
+  </header>
+
+  {% if not exam_aggregate %}
+  <div style="padding: 2rem; background: #fff3cd; border: 1px solid #ffeaa7; border-radius: 8px; margin-bottom: 2rem;">
+    <p style="margin: 0; color: #856404;">
+      No analytics data available for this exam yet. Run the compute_analytics command to generate data.
+    </p>
+  </div>
+  {% else %}
+
+  <section style="margin-bottom: 2rem;">
+    <h2 style="font-size: 1.5rem; font-weight: 600; margin-bottom: 1rem;">Overall Statistics</h2>
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem;">
+      <div style="background: white; padding: 1.5rem; border-radius: 8px; border: 1px solid #dee2e6;">
+        <div style="font-size: 0.875rem; color: #666; margin-bottom: 0.5rem;">Total Students</div>
+        <div style="font-size: 1.75rem; font-weight: 700;">{{ exam_aggregate.total_students }}</div>
+      </div>
+      <div style="background: white; padding: 1.5rem; border-radius: 8px; border: 1px solid #dee2e6;">
+        <div style="font-size: 0.875rem; color: #666; margin-bottom: 0.5rem;">Mean Score</div>
+        <div style="font-size: 1.75rem; font-weight: 700;">
+          {% if exam_aggregate.mean_score %}{{ exam_aggregate.mean_score|floatformat:2 }}{% else %}-{% endif %}
+        </div>
+      </div>
+      <div style="background: white; padding: 1.5rem; border-radius: 8px; border: 1px solid #dee2e6;">
+        <div style="font-size: 0.875rem; color: #666; margin-bottom: 0.5rem;">Median Score</div>
+        <div style="font-size: 1.75rem; font-weight: 700;">
+          {% if exam_aggregate.median_score %}{{ exam_aggregate.median_score|floatformat:2 }}{% else %}-{% endif %}
+        </div>
+      </div>
+      <div style="background: white; padding: 1.5rem; border-radius: 8px; border: 1px solid #dee2e6;">
+        <div style="font-size: 0.875rem; color: #666; margin-bottom: 0.5rem;">Pass Rate</div>
+        <div style="font-size: 1.75rem; font-weight: 700;">
+          {% if exam_aggregate.pass_rate %}{{ exam_aggregate.pass_rate|floatformat:1 }}%{% else %}-{% endif %}
+        </div>
+      </div>
+      <div style="background: white; padding: 1.5rem; border-radius: 8px; border: 1px solid #dee2e6;">
+        <div style="font-size: 0.875rem; color: #666; margin-bottom: 0.5rem;">Min Score</div>
+        <div style="font-size: 1.75rem; font-weight: 700;">
+          {% if exam_aggregate.min_score %}{{ exam_aggregate.min_score|floatformat:2 }}{% else %}-{% endif %}
+        </div>
+      </div>
+      <div style="background: white; padding: 1.5rem; border-radius: 8px; border: 1px solid #dee2e6;">
+        <div style="font-size: 0.875rem; color: #666; margin-bottom: 0.5rem;">Max Score</div>
+        <div style="font-size: 1.75rem; font-weight: 700;">
+          {% if exam_aggregate.max_score %}{{ exam_aggregate.max_score|floatformat:2 }}{% else %}-{% endif %}
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section style="margin-bottom: 2rem;">
+    <h2 style="font-size: 1.5rem; font-weight: 600; margin-bottom: 1rem;">Grade Distribution</h2>
+    <div style="background: white; padding: 1.5rem; border-radius: 8px; border: 1px solid #dee2e6;">
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); gap: 1rem;">
+        <div style="text-align: center;">
+          <div style="font-size: 0.875rem; color: #666; margin-bottom: 0.5rem;">Grade A</div>
+          <div style="font-size: 1.5rem; font-weight: 700;">{{ exam_aggregate.grade_a_count }}</div>
+        </div>
+        <div style="text-align: center;">
+          <div style="font-size: 0.875rem; color: #666; margin-bottom: 0.5rem;">Grade B</div>
+          <div style="font-size: 1.5rem; font-weight: 700;">{{ exam_aggregate.grade_b_count }}</div>
+        </div>
+        <div style="text-align: center;">
+          <div style="font-size: 0.875rem; color: #666; margin-bottom: 0.5rem;">Grade C</div>
+          <div style="font-size: 1.5rem; font-weight: 700;">{{ exam_aggregate.grade_c_count }}</div>
+        </div>
+        <div style="text-align: center;">
+          <div style="font-size: 0.875rem; color: #666; margin-bottom: 0.5rem;">Grade D</div>
+          <div style="font-size: 1.5rem; font-weight: 700;">{{ exam_aggregate.grade_d_count }}</div>
+        </div>
+        <div style="text-align: center;">
+          <div style="font-size: 0.875rem; color: #666; margin-bottom: 0.5rem;">Grade F</div>
+          <div style="font-size: 1.5rem; font-weight: 700; color: #dc3545;">{{ exam_aggregate.grade_f_count }}</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  {% if component_aggregates %}
+  <section style="margin-bottom: 2rem;">
+    <h2 style="font-size: 1.5rem; font-weight: 600; margin-bottom: 1rem;">Component Statistics</h2>
+    <div style="background: white; border: 1px solid #dee2e6; border-radius: 8px; overflow: hidden;">
+      <table style="width: 100%; border-collapse: collapse;">
+        <thead style="background: #f8f9fa;">
+          <tr>
+            <th style="padding: 0.75rem; text-align: left; border-bottom: 1px solid #dee2e6;">Component</th>
+            <th style="padding: 0.75rem; text-align: right; border-bottom: 1px solid #dee2e6;">Mean</th>
+            <th style="padding: 0.75rem; text-align: right; border-bottom: 1px solid #dee2e6;">Median</th>
+            <th style="padding: 0.75rem; text-align: right; border-bottom: 1px solid #dee2e6;">Std Dev</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for comp in component_aggregates %}
+          <tr style="border-bottom: 1px solid #dee2e6;">
+            <td style="padding: 0.75rem; font-weight: 500;">{{ comp.get_component_display }}</td>
+            <td style="padding: 0.75rem; text-align: right;">
+              {% if comp.mean_score %}{{ comp.mean_score|floatformat:2 }}{% else %}-{% endif %}
+            </td>
+            <td style="padding: 0.75rem; text-align: right;">
+              {% if comp.median_score %}{{ comp.median_score|floatformat:2 }}{% else %}-{% endif %}
+            </td>
+            <td style="padding: 0.75rem; text-align: right;">
+              {% if comp.std_dev %}{{ comp.std_dev|floatformat:2 }}{% else %}-{% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+  {% endif %}
+
+  {% if anomaly_flags %}
+  <section style="margin-bottom: 2rem;">
+    <h2 style="font-size: 1.5rem; font-weight: 600; margin-bottom: 1rem;">Anomalies Detected</h2>
+    <div style="background: white; border: 1px solid #dee2e6; border-radius: 8px; overflow: hidden;">
+      <table style="width: 100%; border-collapse: collapse;">
+        <thead style="background: #f8f9fa;">
+          <tr>
+            <th style="padding: 0.75rem; text-align: left; border-bottom: 1px solid #dee2e6;">Severity</th>
+            <th style="padding: 0.75rem; text-align: left; border-bottom: 1px solid #dee2e6;">Type</th>
+            <th style="padding: 0.75rem; text-align: left; border-bottom: 1px solid #dee2e6;">Message</th>
+            <th style="padding: 0.75rem; text-align: left; border-bottom: 1px solid #dee2e6;">Detected</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for flag in anomaly_flags %}
+          <tr style="border-bottom: 1px solid #dee2e6;">
+            <td style="padding: 0.75rem;">
+              <span style="padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.875rem; 
+                {% if flag.severity == 'CRITICAL' %}background: #fee; color: #c00;{% elif flag.severity == 'WARNING' %}background: #fff3cd; color: #856404;{% else %}background: #d1ecf1; color: #0c5460;{% endif %}">
+                {{ flag.get_severity_display }}
+              </span>
+            </td>
+            <td style="padding: 0.75rem;">{{ flag.flag_type }}</td>
+            <td style="padding: 0.75rem;">{{ flag.message }}</td>
+            <td style="padding: 0.75rem; color: #666; font-size: 0.875rem;">{{ flag.detected_at|date:"Y-m-d H:i" }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+  {% endif %}
+
+  {% endif %}
+</div>
+{% endblock %}
