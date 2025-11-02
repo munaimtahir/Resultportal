@@ -1,6 +1,7 @@
+"""CSV import workflow for examination results."""
+
 from __future__ import annotations
 
-"""CSV import workflow for examination results."""
 from collections.abc import Iterable
 from datetime import date
 from decimal import Decimal, InvalidOperation

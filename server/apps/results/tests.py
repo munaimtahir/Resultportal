@@ -7,6 +7,7 @@ from unittest.mock import Mock
 
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
+from django.db import IntegrityError
 from django.test import TestCase
 from django.utils import timezone
 
@@ -31,10 +32,10 @@ class YearClassModelTests(TestCase):
         """Test that label and order must be unique."""
         YearClass.objects.create(label="1st Year", order=1)
 
-        with self.assertRaises(Exception):  # IntegrityError
+        with self.assertRaises(IntegrityError):
             YearClass.objects.create(label="1st Year", order=2)
 
-        with self.assertRaises(Exception):  # IntegrityError
+        with self.assertRaises(IntegrityError):
             YearClass.objects.create(label="First Year", order=1)
 
 
@@ -1097,7 +1098,10 @@ PMC-002,Jane,Smith,Jane Smith,jane@pmc.edu.pk"""
         session = self.client.session
         session["student_import_preview"] = {
             "year_class_id": self.year_class.id,
-            "csv_content": "roll_no,first_name,last_name,display_name,official_email\nPMC-001,John,Doe,John Doe,john@pmc.edu.pk",
+            "csv_content": (
+                "roll_no,first_name,last_name,display_name,official_email\n"
+                "PMC-001,John,Doe,John Doe,john@pmc.edu.pk"
+            ),
             "row_count": 1,
             "created": 1,
             "updated": 0,
@@ -1120,7 +1124,10 @@ PMC-002,Jane,Smith,Jane Smith,jane@pmc.edu.pk"""
         session = self.client.session
         session["student_import_preview"] = {
             "year_class_id": self.year_class.id,
-            "csv_content": "roll_no,first_name,last_name,display_name,official_email\nPMC-100,John,Doe,John Doe,john100@pmc.edu.pk",
+            "csv_content": (
+                "roll_no,first_name,last_name,display_name,official_email\n"
+                "PMC-100,John,Doe,John Doe,john100@pmc.edu.pk"
+            ),
             "row_count": 1,
             "created": 1,
             "updated": 0,
@@ -1166,8 +1173,11 @@ PMC-002,Jane,Smith,Jane Smith,jane@pmc.edu.pk"""
             roll_number="PMC-100",
         )
 
-        csv_content = """roll_no,name,block,year,subject,written_marks,viva_marks,total_marks,grade,exam_date
-PMC-100,Test Student,A,1,Anatomy,70,20,90,A,2025-01-15"""
+        csv_content = (
+            "roll_no,name,block,year,subject,written_marks,viva_marks,"
+            "total_marks,grade,exam_date\n"
+            "PMC-100,Test Student,A,1,Anatomy,70,20,90,A,2025-01-15"
+        )
         csv_file = io.BytesIO(csv_content.encode("utf-8"))
         csv_file.name = "results.csv"
 
@@ -1196,7 +1206,11 @@ PMC-100,Test Student,A,1,Anatomy,70,20,90,A,2025-01-15"""
         session["result_import_preview"] = {
             "exam_id": self.exam.id,
             "batch_id": batch.id,
-            "csv_content": "roll_no,name,block,year,subject,written_marks,viva_marks,total_marks,grade,exam_date\nPMC-100,Test,A,1,Anatomy,70,20,90,A,2025-01-15",
+            "csv_content": (
+                "roll_no,name,block,year,subject,written_marks,viva_marks,"
+                "total_marks,grade,exam_date\n"
+                "PMC-100,Test,A,1,Anatomy,70,20,90,A,2025-01-15"
+            ),
             "filename": "results.csv",
             "row_count": 1,
             "created": 1,
@@ -1217,7 +1231,7 @@ PMC-100,Test Student,A,1,Anatomy,70,20,90,A,2025-01-15"""
     def test_result_csv_preview_submit_creates_results(self):
         """Test that submitting result CSV preview creates results."""
         # Create a student first
-        student = Student.objects.create(
+        Student.objects.create(
             year_class=self.year_class,
             official_email="student@pmc.edu.pk",
             roll_number="PMC-100",
@@ -1236,7 +1250,11 @@ PMC-100,Test Student,A,1,Anatomy,70,20,90,A,2025-01-15"""
         session["result_import_preview"] = {
             "exam_id": self.exam.id,
             "batch_id": batch.id,
-            "csv_content": "roll_no,name,block,year,subject,written_marks,viva_marks,total_marks,grade,exam_date\nPMC-100,Test,A,1,Anatomy,70,20,90,A,2025-01-15",
+            "csv_content": (
+                "roll_no,name,block,year,subject,written_marks,viva_marks,"
+                "total_marks,grade,exam_date\n"
+                "PMC-100,Test,A,1,Anatomy,70,20,90,A,2025-01-15"
+            ),
             "filename": "results.csv",
             "row_count": 1,
             "created": 1,

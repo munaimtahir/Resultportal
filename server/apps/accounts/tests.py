@@ -6,9 +6,9 @@ from datetime import timedelta
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core.exceptions import PermissionDenied
+from django.db import IntegrityError
 from django.test import TestCase
 from django.utils import timezone
-
 from social_core.exceptions import AuthForbidden
 
 from . import pipeline
@@ -30,10 +30,10 @@ class YearClassModelTests(TestCase):
         """Test that label and order must be unique."""
         YearClass.objects.create(label="1st Year", order=1)
 
-        with self.assertRaises(Exception):  # IntegrityError
+        with self.assertRaises(IntegrityError):
             YearClass.objects.create(label="1st Year", order=2)
 
-        with self.assertRaises(Exception):  # IntegrityError
+        with self.assertRaises(IntegrityError):
             YearClass.objects.create(label="First Year", order=1)
 
 
@@ -129,7 +129,7 @@ class StudentModelTests(TestCase):
         )
 
         # Same roll in same year should fail
-        with self.assertRaises(Exception):  # IntegrityError
+        with self.assertRaises(IntegrityError):
             Student.objects.create(
                 official_email="student2@pmc.edu.pk",
                 roll_number="PMC-001",

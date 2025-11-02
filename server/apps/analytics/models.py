@@ -96,6 +96,9 @@ class ComparisonAggregate(models.Model):
     computed_at = models.DateTimeField(auto_now=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
+    def __str__(self):
+        return f"Comparison: {self.current_exam} vs {self.previous_exam or 'N/A'}"
+
 
 class TrendAggregate(models.Model):
     """Multi-session trend analysis."""
@@ -106,6 +109,9 @@ class TrendAggregate(models.Model):
     trend_data = models.JSONField(default=dict)
     computed_at = models.DateTimeField(auto_now=True)
     created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"Trend: {self.year_class} - {self.period_label}"
 
 
 class AnomalyFlag(models.Model):
@@ -122,6 +128,9 @@ class AnomalyFlag(models.Model):
     message = models.TextField()
 
     detected_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.severity}: {self.flag_type} - {self.exam}"
 
     class Meta:
         ordering = ("-detected_at",)
