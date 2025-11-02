@@ -12,7 +12,40 @@ from apps.accounts.models import Student
 
 from .forms import ResultCSVUploadForm, StudentCSVUploadForm
 from .importers import ResultCSVImporter
-from .models import Result
+from .models import ImportBatch, Result
+
+
+class TokenOrLoginRequiredMixin:
+    """Mixin to require either token-based or standard authentication."""
+
+    def dispatch(self, request, *args, **kwargs):
+        # Check if user is authenticated via standard login
+        if request.user.is_authenticated and hasattr(request.user, "student_profile"):
+            return super().dispatch(request, *args, **kwargs)
+
+        # Check if user is authenticated via token
+        if request.session.get("token_authenticated") and request.session.get("token_student_id"):
+            return super().dispatch(request, *args, **kwargs)
+
+        # Not authenticated either way - redirect to token login
+        messages.error(request, "Please log in to access your results.")
+        return redirect("accounts:token_authenticate")
+
+    def get_student(self):
+        """Get the student for the current request (from user or token)."""
+        # Standard authentication
+        if self.request.user.is_authenticated and hasattr(self.request.user, "student_profile"):
+            return self.request.user.student_profile
+
+        # Token authentication
+        student_id = self.request.session.get("token_student_id")
+        if student_id:
+            try:
+                return Student.objects.get(id=student_id)
+            except Student.DoesNotExist:
+                pass
+
+        return None
 
 
 class TokenOrLoginRequiredMixin:
