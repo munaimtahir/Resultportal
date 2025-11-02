@@ -6,7 +6,7 @@ from decimal import Decimal
 from typing import Any
 
 from django.db import transaction
-from django.db.models import Avg, Count, Max, Min, Q, StdDev
+from django.db.models import Avg, Count, Max, Min, StdDev
 
 from apps.results.models import Exam, Result
 
