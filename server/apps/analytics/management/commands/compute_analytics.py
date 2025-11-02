@@ -42,7 +42,7 @@ class Command(BaseCommand):
             )
             self.stdout.write(
                 self.style.SUCCESS(
-                    f'✓ Component aggregates computed: '
+                    f"✓ Component aggregates computed: "
                     f'{len(result["component_aggregates"])} components'
                 )
             )
