@@ -30,13 +30,17 @@ class YearClassModelTests(TestCase):
 
     def test_unique_label_and_order(self) -> None:
         """Test that label and order must be unique."""
+        from django.db import transaction
+
         YearClass.objects.create(label="1st Year", order=1)
 
-        with self.assertRaises(IntegrityError):
-            YearClass.objects.create(label="1st Year", order=2)
+        with transaction.atomic():
+            with self.assertRaises(IntegrityError):
+                YearClass.objects.create(label="1st Year", order=2)
 
-        with self.assertRaises(IntegrityError):
-            YearClass.objects.create(label="First Year", order=1)
+        with transaction.atomic():
+            with self.assertRaises(IntegrityError):
+                YearClass.objects.create(label="First Year", order=1)
 
 
 class ExamModelTests(TestCase):
