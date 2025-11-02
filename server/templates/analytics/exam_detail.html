@@ -32,31 +32,31 @@
       <div style="background: white; padding: 1.5rem; border-radius: 8px; border: 1px solid #dee2e6;">
         <div style="font-size: 0.875rem; color: #666; margin-bottom: 0.5rem;">Mean Score</div>
         <div style="font-size: 1.75rem; font-weight: 700;">
-          {% if exam_aggregate.mean_score %}{{ exam_aggregate.mean_score|floatformat:2 }}{% else %}-{% endif %}
+          {% if exam_aggregate.mean_score is not None %}{{ exam_aggregate.mean_score|floatformat:2 }}{% else %}-{% endif %}
         </div>
       </div>
       <div style="background: white; padding: 1.5rem; border-radius: 8px; border: 1px solid #dee2e6;">
         <div style="font-size: 0.875rem; color: #666; margin-bottom: 0.5rem;">Median Score</div>
         <div style="font-size: 1.75rem; font-weight: 700;">
-          {% if exam_aggregate.median_score %}{{ exam_aggregate.median_score|floatformat:2 }}{% else %}-{% endif %}
+          {% if exam_aggregate.median_score is not None %}{{ exam_aggregate.median_score|floatformat:2 }}{% else %}-{% endif %}
         </div>
       </div>
       <div style="background: white; padding: 1.5rem; border-radius: 8px; border: 1px solid #dee2e6;">
         <div style="font-size: 0.875rem; color: #666; margin-bottom: 0.5rem;">Pass Rate</div>
         <div style="font-size: 1.75rem; font-weight: 700;">
-          {% if exam_aggregate.pass_rate %}{{ exam_aggregate.pass_rate|floatformat:1 }}%{% else %}-{% endif %}
+          {% if exam_aggregate.pass_rate is not None %}{{ exam_aggregate.pass_rate|floatformat:1 }}%{% else %}-{% endif %}
         </div>
       </div>
       <div style="background: white; padding: 1.5rem; border-radius: 8px; border: 1px solid #dee2e6;">
         <div style="font-size: 0.875rem; color: #666; margin-bottom: 0.5rem;">Min Score</div>
         <div style="font-size: 1.75rem; font-weight: 700;">
-          {% if exam_aggregate.min_score %}{{ exam_aggregate.min_score|floatformat:2 }}{% else %}-{% endif %}
+          {% if exam_aggregate.min_score is not None %}{{ exam_aggregate.min_score|floatformat:2 }}{% else %}-{% endif %}
         </div>
       </div>
       <div style="background: white; padding: 1.5rem; border-radius: 8px; border: 1px solid #dee2e6;">
         <div style="font-size: 0.875rem; color: #666; margin-bottom: 0.5rem;">Max Score</div>
         <div style="font-size: 1.75rem; font-weight: 700;">
-          {% if exam_aggregate.max_score %}{{ exam_aggregate.max_score|floatformat:2 }}{% else %}-{% endif %}
+          {% if exam_aggregate.max_score is not None %}{{ exam_aggregate.max_score|floatformat:2 }}{% else %}-{% endif %}
         </div>
       </div>
     </div>
