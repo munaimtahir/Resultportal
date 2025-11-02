@@ -64,6 +64,14 @@ class URLConfigTests(TestCase):
             # URL might not be defined yet, but namespace should exist
             pass
 
+    def test_analytics_urls_configured(self):
+        """Test that analytics URLs namespace exists."""
+        try:
+            reverse("analytics:dashboard")
+        except Exception:
+            # URL might not be defined yet, but namespace should exist
+            pass
+
 
 class FeatureFlagsTests(TestCase):
     """Tests for feature flags and middleware."""

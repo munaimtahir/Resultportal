@@ -1,0 +1,114 @@
+{% extends "base.html" %}
+
+{% block title %}Analytics Dashboard - Result Portal{% endblock %}
+
+{% block content %}
+<div style="max-width: 1200px; margin: 0 auto; padding: 2rem;">
+  <header style="margin-bottom: 2rem;">
+    <h1 style="font-size: 2rem; font-weight: 700; margin-bottom: 0.5rem;">Analytics Dashboard</h1>
+    <p style="color: #666;">Staff-only view of exam statistics and insights</p>
+  </header>
+
+  <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1rem; margin-bottom: 2rem;">
+    <div style="background: #f8f9fa; padding: 1.5rem; border-radius: 8px; border: 1px solid #dee2e6;">
+      <div style="font-size: 0.875rem; color: #666; margin-bottom: 0.5rem;">Total Exams Analyzed</div>
+      <div style="font-size: 2rem; font-weight: 700;">{{ total_exams_analyzed }}</div>
+    </div>
+    <div style="background: #f8f9fa; padding: 1.5rem; border-radius: 8px; border: 1px solid #dee2e6;">
+      <div style="font-size: 0.875rem; color: #666; margin-bottom: 0.5rem;">Total Anomalies</div>
+      <div style="font-size: 2rem; font-weight: 700;">{{ total_anomalies }}</div>
+    </div>
+  </div>
+
+  {% if recent_anomalies %}
+  <section style="margin-bottom: 2rem;">
+    <h2 style="font-size: 1.5rem; font-weight: 600; margin-bottom: 1rem;">Recent Anomalies</h2>
+    <div style="background: white; border: 1px solid #dee2e6; border-radius: 8px; overflow: hidden;">
+      <table style="width: 100%; border-collapse: collapse;">
+        <thead style="background: #f8f9fa;">
+          <tr>
+            <th style="padding: 0.75rem; text-align: left; border-bottom: 1px solid #dee2e6;">Exam</th>
+            <th style="padding: 0.75rem; text-align: left; border-bottom: 1px solid #dee2e6;">Severity</th>
+            <th style="padding: 0.75rem; text-align: left; border-bottom: 1px solid #dee2e6;">Type</th>
+            <th style="padding: 0.75rem; text-align: left; border-bottom: 1px solid #dee2e6;">Message</th>
+            <th style="padding: 0.75rem; text-align: left; border-bottom: 1px solid #dee2e6;">Detected</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for anomaly in recent_anomalies %}
+          <tr style="border-bottom: 1px solid #dee2e6;">
+            <td style="padding: 0.75rem;">
+              <a href="{% url 'analytics:exam_detail' anomaly.exam.id %}" style="color: #0066cc; text-decoration: none;">
+                {{ anomaly.exam.code }}
+              </a>
+            </td>
+            <td style="padding: 0.75rem;">
+              <span style="padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.875rem; 
+                {% if anomaly.severity == 'CRITICAL' %}background: #fee; color: #c00;{% elif anomaly.severity == 'WARNING' %}background: #fff3cd; color: #856404;{% else %}background: #d1ecf1; color: #0c5460;{% endif %}">
+                {{ anomaly.get_severity_display }}
+              </span>
+            </td>
+            <td style="padding: 0.75rem;">{{ anomaly.flag_type }}</td>
+            <td style="padding: 0.75rem;">{{ anomaly.message }}</td>
+            <td style="padding: 0.75rem; color: #666; font-size: 0.875rem;">{{ anomaly.detected_at|date:"Y-m-d H:i" }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+  {% endif %}
+
+  <section>
+    <h2 style="font-size: 1.5rem; font-weight: 600; margin-bottom: 1rem;">Recent Exam Analytics</h2>
+    <div style="background: white; border: 1px solid #dee2e6; border-radius: 8px; overflow: hidden;">
+      <table style="width: 100%; border-collapse: collapse;">
+        <thead style="background: #f8f9fa;">
+          <tr>
+            <th style="padding: 0.75rem; text-align: left; border-bottom: 1px solid #dee2e6;">Exam</th>
+            <th style="padding: 0.75rem; text-align: right; border-bottom: 1px solid #dee2e6;">Students</th>
+            <th style="padding: 0.75rem; text-align: right; border-bottom: 1px solid #dee2e6;">Mean Score</th>
+            <th style="padding: 0.75rem; text-align: right; border-bottom: 1px solid #dee2e6;">Pass Rate</th>
+            <th style="padding: 0.75rem; text-align: right; border-bottom: 1px solid #dee2e6;">Computed</th>
+            <th style="padding: 0.75rem; text-align: center; border-bottom: 1px solid #dee2e6;">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for aggregate in recent_aggregates %}
+          <tr style="border-bottom: 1px solid #dee2e6;">
+            <td style="padding: 0.75rem;">{{ aggregate.exam.code }}</td>
+            <td style="padding: 0.75rem; text-align: right;">{{ aggregate.total_students }}</td>
+            <td style="padding: 0.75rem; text-align: right;">
+              {% if aggregate.mean_score %}{{ aggregate.mean_score|floatformat:2 }}{% else %}-{% endif %}
+            </td>
+            <td style="padding: 0.75rem; text-align: right;">
+              {% if aggregate.pass_rate %}{{ aggregate.pass_rate|floatformat:1 }}%{% else %}-{% endif %}
+            </td>
+            <td style="padding: 0.75rem; text-align: right; color: #666; font-size: 0.875rem;">
+              {{ aggregate.computed_at|date:"Y-m-d H:i" }}
+            </td>
+            <td style="padding: 0.75rem; text-align: center;">
+              <a href="{% url 'analytics:exam_detail' aggregate.exam.id %}" 
+                 style="color: #0066cc; text-decoration: none; font-size: 0.875rem;">View Details</a>
+            </td>
+          </tr>
+          {% empty %}
+          <tr>
+            <td colspan="6" style="padding: 2rem; text-align: center; color: #666;">
+              No analytics data available yet. Run the compute_analytics management command to generate data.
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <div style="margin-top: 2rem; padding: 1rem; background: #f8f9fa; border-radius: 8px;">
+    <p style="margin: 0; color: #666; font-size: 0.875rem;">
+      <strong>Note:</strong> Analytics are computed using the <code>compute_analytics</code> management command.
+      Schedule this command to run after result imports to keep analytics up to date.
+    </p>
+  </div>
+</div>
+{% endblock %}
