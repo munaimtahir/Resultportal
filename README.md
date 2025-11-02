@@ -37,7 +37,20 @@ The fastest way to get started is using Docker. This handles all dependencies an
 - Docker and Docker Compose installed
 - No other services running on ports 8000 and 5432
 
-#### Setup and Run
+#### Quick Setup (One Command)
+
+```bash
+./docker-setup.sh
+```
+
+This script will:
+- Check Docker installation
+- Create `.env` file from `.env.docker`
+- Build containers
+- Start all services
+- Verify everything is running
+
+#### Manual Setup
 
 1. **Clone the repository**:
 ```bash
@@ -103,6 +116,51 @@ docker compose exec web python manage.py import_students /app/students.csv --com
 
 ```bash
 docker compose exec web pytest
+```
+
+#### Docker Troubleshooting
+
+**Port already in use:**
+```bash
+# Check what's using port 8000 or 5432
+sudo lsof -i :8000
+sudo lsof -i :5432
+
+# Stop the conflicting service or use different ports in docker-compose.yml
+```
+
+**Database issues:**
+```bash
+# Reset the database completely
+docker compose down -v
+docker compose up -d
+```
+
+**View detailed logs:**
+```bash
+# All services
+docker compose logs -f
+
+# Specific service
+docker compose logs -f web
+docker compose logs -f db
+```
+
+**Container won't start:**
+```bash
+# Rebuild without cache
+docker compose build --no-cache
+docker compose up -d
+```
+
+**Permission issues:**
+```bash
+# Ensure Docker daemon is running
+sudo systemctl status docker
+
+# Add your user to docker group (Linux)
+sudo usermod -aG docker $USER
+# Log out and back in for changes to take effect
 ```
 
 ### Option 2: Local Installation
