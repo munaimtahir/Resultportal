@@ -60,3 +60,35 @@ clean:  ## Clean build artifacts and caches
 
 check:  ## Run Django system checks
 	. .venv/bin/activate && cd server && python manage.py check
+
+# === Docker Commands ===
+
+docker-build:  ## Build Docker containers
+	docker compose build
+
+docker-up:  ## Start Docker containers in detached mode
+	docker compose up -d
+
+docker-down:  ## Stop Docker containers
+	docker compose down
+
+docker-logs:  ## View Docker container logs
+	docker compose logs -f web
+
+docker-shell:  ## Open shell in web container
+	docker compose exec web bash
+
+docker-migrate:  ## Run migrations in Docker
+	docker compose exec web python manage.py migrate
+
+docker-superuser:  ## Create superuser in Docker
+	docker compose exec web python manage.py createsuperuser
+
+docker-test:  ## Run tests in Docker
+	docker compose exec web pytest
+
+docker-clean:  ## Stop containers and remove volumes
+	docker compose down -v
+
+docker-restart:  ## Restart Docker containers
+	docker compose restart

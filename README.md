@@ -29,13 +29,91 @@ A comprehensive result management system for PMC (Pakistan Medical Council) with
 
 ## Quick Start
 
-### Prerequisites
+### Option 1: Docker (Recommended)
+
+The fastest way to get started is using Docker. This handles all dependencies and database setup automatically.
+
+#### Prerequisites
+- Docker and Docker Compose installed
+- No other services running on ports 8000 and 5432
+
+#### Setup and Run
+
+1. **Clone the repository**:
+```bash
+git clone <repository-url>
+cd Resultportal
+```
+
+2. **Setup environment**:
+```bash
+cp .env.docker .env
+# Optionally edit .env for Google OAuth credentials
+```
+
+3. **Build and start services**:
+```bash
+docker compose up -d
+```
+
+This single command will:
+- Build the Django application container
+- Start PostgreSQL database
+- Run database migrations
+- Collect static files
+- Start the web server on http://localhost:8000
+
+4. **Create a superuser** (optional):
+```bash
+docker compose exec web python manage.py createsuperuser
+```
+
+5. **View logs**:
+```bash
+docker compose logs -f web
+```
+
+6. **Stop services**:
+```bash
+docker compose down
+```
+
+7. **Stop and remove all data**:
+```bash
+docker compose down -v  # Warning: This deletes the database
+```
+
+#### Import Data with Docker
+
+```bash
+# Import students
+docker compose exec web python manage.py import_students /app/students.csv --commit
+
+# Import results
+docker compose exec web python manage.py import_results /app/results.csv --commit
+```
+
+To import files from your host machine, copy them to the container first:
+```bash
+docker cp students.csv resultportal_web:/app/students.csv
+docker compose exec web python manage.py import_students /app/students.csv --commit
+```
+
+#### Run Tests with Docker
+
+```bash
+docker compose exec web pytest
+```
+
+### Option 2: Local Installation
+
+#### Prerequisites
 
 - Python 3.11+ or 3.12
 - PostgreSQL 14+ (SQLite for development)
 - Google Cloud project with OAuth2 credentials (optional for admin access)
 
-### Installation
+#### Installation
 
 1. **Clone and setup environment**:
 ```bash
