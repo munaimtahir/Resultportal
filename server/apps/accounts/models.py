@@ -168,7 +168,9 @@ class StudentAccessToken(models.Model):
         return f"Token for {self.student.roll_number} (expires {self.expires_at:%Y-%m-%d})"
 
     @classmethod
-    def generate_for_student(cls, student: Student, validity_hours: int = 24) -> StudentAccessToken:
+    def generate_for_student(
+        cls, student: Student, validity_hours: int = 24
+    ) -> StudentAccessToken:
         """Generate a new access token for a student."""
         code = secrets.token_urlsafe(32)
         expires_at = timezone.now() + timedelta(hours=validity_hours)

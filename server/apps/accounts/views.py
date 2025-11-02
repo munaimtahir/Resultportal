@@ -70,6 +70,7 @@ class TokenSuccessView(TemplateView):
 
         # Retrieve token from session
 
+
         token_code = self.request.session.get("token_code")
         token_expires_str = self.request.session.get("token_expires")
         import datetime as dt
