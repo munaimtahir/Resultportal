@@ -70,7 +70,7 @@ def compute_exam_aggregates(exam: Exam) -> ExamAggregate:
     # Compute pass/fail metrics (assuming grade 'F' means fail)
     pass_count = results.exclude(grade='F').count()
     fail_count = results.filter(grade='F').count()
-    pass_rate = (pass_count / count * 100) if count > 0 else None
+    pass_rate = (Decimal(str(pass_count)) / Decimal(str(count)) * Decimal('100')) if count > 0 else None
     
     # Compute grade distribution
     grade_counts = {
