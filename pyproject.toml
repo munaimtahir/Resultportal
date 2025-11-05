@@ -61,6 +61,10 @@ select = [
 ignore = [
     "S101",  # Use of assert detected (pytest uses assert)
     "DJ001", # Avoid using `null=True` on string-based fields
+    "N806",  # Variable in function should be lowercase (allows User = get_user_model())
+    "C901",  # Function is too complex (allow complex business logic)
+    "DJ012", # Order of model's inner classes (allow flexibility)
+    "S110",  # try-except-pass (allow when documented)
 ]
 
 [tool.ruff.lint.per-file-ignores]

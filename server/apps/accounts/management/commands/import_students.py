@@ -103,4 +103,4 @@ class Command(BaseCommand):
                     sys.exit(1)
 
         except Exception as e:
-            raise CommandError(f"Import failed: {str(e)}")
+            raise CommandError(f"Import failed: {str(e)}") from e

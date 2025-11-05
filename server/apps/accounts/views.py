@@ -2,7 +2,7 @@
 
 from django.conf import settings
 from django.contrib import messages
-from django.shortcuts import redirect, render
+from django.shortcuts import redirect
 from django.urls import reverse
 from django.views.generic import FormView, TemplateView
 
@@ -69,7 +69,6 @@ class TokenSuccessView(TemplateView):
         context = super().get_context_data(**kwargs)
 
         # Retrieve token from session
-
 
         token_code = self.request.session.get("token_code")
         token_expires_str = self.request.session.get("token_expires")
